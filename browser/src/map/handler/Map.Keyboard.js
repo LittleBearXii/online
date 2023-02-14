@@ -468,6 +468,18 @@ L.Map.Keyboard = L.Handler.extend({
 			return;
 		}
 
+		if (ev.type === 'keydown' 
+			&& !this.modifier 
+			&& ((keyCode ===  this.keyCodes.F8) ||
+			(keyCode ===  this.keyCodes.F9) ||
+			(keyCode ===  this.keyCodes.F10) ||
+			(keyCode ===  this.keyCodes.F11) ||
+			(keyCode ===  this.keyCodes.F12))) {
+			ev.preventDefault();
+
+			return;
+		}
+
 		// don't trigger browser reload on F5, launch slideshow in Impress
 		if (ev.type === 'keydown' && keyCode === this.keyCodes.F5) {
 			ev.preventDefault();
