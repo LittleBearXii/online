@@ -17,6 +17,8 @@ L.Control.JSDialogBuilder = L.Control.extend({
 		mobileWizard: null,
 		// css class name added to the html nodes
 		cssClass: 'mobile-wizard',
+		// custom tabs placement handled by the parent container
+		useSetTabs: false,
 
 		// create only icon without label
 		noLabelsForUnoButtons: false,
@@ -63,7 +65,7 @@ L.Control.JSDialogBuilder = L.Control.extend({
 
 		// list of types which can have multiple children but are not considered as containers
 		this._nonContainerType = ['buttonbox', 'treelistbox', 'iconview', 'combobox', 'listbox',
-			'scrollwindow', 'grid', 'tabcontrol'];
+			'scrollwindow', 'grid', 'tabcontrol', 'multilineedit'];
 
 		this._controlHandlers = {};
 		this._controlHandlers['radiobutton'] = this._radiobuttonControl;
@@ -76,6 +78,8 @@ L.Control.JSDialogBuilder = L.Control.extend({
 		this._controlHandlers['multilineedit'] = JSDialog.multilineEdit;
 		this._controlHandlers['pushbutton'] = this._pushbuttonControl;
 		this._controlHandlers['okbutton'] = this._pushbuttonControl;
+		this._controlHandlers['helpbutton'] = this._pushbuttonControl;
+		this._controlHandlers['cancelbutton'] = this._pushbuttonControl;
 		this._controlHandlers['combobox'] = this._comboboxControl;
 		this._controlHandlers['comboboxentry'] = this._comboboxEntry;
 		this._controlHandlers['listbox'] = this._listboxControl;
@@ -91,7 +95,7 @@ L.Control.JSDialogBuilder = L.Control.extend({
 		this._controlHandlers['panel'] = this._panelHandler;
 		this._controlHandlers['calcfuncpanel'] = this._calcFuncListPanelHandler;
 		this._controlHandlers['tabcontrol'] = this._tabsControlHandler;
-		this._controlHandlers['tabpage'] = this._containerHandler;
+		this._controlHandlers['tabpage'] = this._tabPageHandler;
 		this._controlHandlers['paneltabs'] = this._panelTabsHandler;
 		this._controlHandlers['singlepanel'] = this._singlePanelHandler;
 		this._controlHandlers['container'] = this._containerHandler;
@@ -487,7 +491,7 @@ L.Control.JSDialogBuilder = L.Control.extend({
 		if (data.id)
 			scrollwindow.id = data.id;
 
-		builder.build(scrollwindow, data.children, false, true);
+		builder.build(scrollwindow, data.children, false);
 
 		return false;
 	},
@@ -519,6 +523,16 @@ L.Control.JSDialogBuilder = L.Control.extend({
 		}
 
 		return true;
+	},
+
+	// used inside tab control and assistant (chart wizard, where it should create own container)
+	_tabPageHandler: function(parentContainer, data, builder) {
+		var page = L.DomUtil.create('div', builder.options.cssClass + ' ui-tabpage', parentContainer);
+		page.id = data.id;
+
+		builder.build(page, data.children, false);
+
+		return false;
 	},
 
 	_alignmentHandler: function(parentContainer, data, builder) {
@@ -640,7 +654,8 @@ L.Control.JSDialogBuilder = L.Control.extend({
 
 		for (i in leftAlignButtons) {
 			child = leftAlignButtons[i];
-			builder._controlHandlers[child.type](left, child, builder);
+			if (builder._controlHandlers[child.type])
+				builder._controlHandlers[child.type](left, child, builder);
 		}
 
 		var right = L.DomUtil.create('div', builder.options.cssClass + ' ui-button-box-right', container);
@@ -649,7 +664,8 @@ L.Control.JSDialogBuilder = L.Control.extend({
 
 		for (i in rightAlignButton) {
 			child = rightAlignButton[i];
-			builder._controlHandlers[child.type](right, child, builder);
+			if (builder._controlHandlers[child.type])
+				builder._controlHandlers[child.type](right, child, builder);
 		}
 
 		return false;
@@ -1027,9 +1043,11 @@ L.Control.JSDialogBuilder = L.Control.extend({
 			}
 			var isMultiTabJSON = tabs > 1;
 
-			var tabsContainer = L.DomUtil.create('div', 'ui-tabs ' + builder.options.cssClass + ' ui-widget');
-			tabsContainer.id = data.id;
-			var contentsContainer = L.DomUtil.create('div', 'ui-tabs-content ' + builder.options.cssClass + ' ui-widget', parentContainer);
+			var tabWidgetRootContainer = L.DomUtil.create('div', 'ui-tabs-root ' + builder.options.cssClass + ' ui-widget', parentContainer);
+			tabWidgetRootContainer.id = data.id;
+
+			var tabsContainer = L.DomUtil.create('div', 'ui-tabs ' + builder.options.cssClass + ' ui-widget', builder.options.useSetTabs ? undefined : tabWidgetRootContainer);
+			var contentsContainer = L.DomUtil.create('div', 'ui-tabs-content ' + builder.options.cssClass + ' ui-widget', tabWidgetRootContainer);
 
 			var tabs = [];
 			var contentDivs = [];
@@ -1077,7 +1095,8 @@ L.Control.JSDialogBuilder = L.Control.extend({
 			}
 
 			if (builder.wizard) {
-				builder.wizard.setTabs(tabsContainer, builder);
+				if (builder.options.useSetTabs)
+					builder.wizard.setTabs(tabsContainer, builder);
 
 				for (var t = 0; t < tabs.length; t++) {
 					// to get capture of 't' right has to be a sub fn.
@@ -1085,7 +1104,7 @@ L.Control.JSDialogBuilder = L.Control.extend({
 						return function(event) {
 							builder._createTabClick(builder, id, tabs, contentDivs, tabIds)(event);
 							if (data.tabs[id].id - 1 >= 0)
-								builder.callback('tabcontrol', 'selecttab', tabsContainer, id, builder);
+								builder.callback('tabcontrol', 'selecttab', tabWidgetRootContainer, id, builder);
 						};
 					};
 					$(tabs[t]).click(fn(t));
@@ -1124,6 +1143,9 @@ L.Control.JSDialogBuilder = L.Control.extend({
 	},
 
 	_panelTabsHandler: function(parentContainer, data, builder) {
+		if (!builder.options.useSetTabs)
+			console.warn('mobile panelTabsHandler: setTabs will be used ignoring useSetTabs property');
+
 		var tabsContainer = L.DomUtil.create('div', 'ui-tabs ' + builder.options.cssClass + ' ui-widget');
 		var contentsContainer = L.DomUtil.create('div', 'ui-tabs-content ' + builder.options.cssClass + ' ui-widget', parentContainer);
 
@@ -1512,12 +1534,12 @@ L.Control.JSDialogBuilder = L.Control.extend({
 		else if (builder._responses[pushbutton.id] !== undefined)
 			pushbutton.onclick = builder.callback.bind(builder, 'responsebutton', 'click', { id: pushbutton.id }, builder._responses[pushbutton.id], builder);
 		else
-			pushbutton.onclick = builder.callback.bind(builder, 'pushbutton', 'click', pushbutton, data.command, builder);
+			pushbutton.onclick = builder.callback.bind(builder, 'pushbutton', data.isToggle ? 'toggle' : 'click', pushbutton, data.command, builder);
 
 		builder.map.hideRestrictedItems(data, wrapper, pushbutton);
 		builder.map.disableLockedItem(data, wrapper, pushbutton);
 		if (data.hidden)
-			$(pushbutton).hide();
+			$(wrapper).hide(); // Both pushbutton and its wrapper needs to be hidden.
 
 		return false;
 	},
@@ -2141,6 +2163,10 @@ L.Control.JSDialogBuilder = L.Control.extend({
 		}
 
 		var iconURLAliases = {
+			'closetablet': 'view',
+			'defineprintarea': 'menuprintranges',
+			'deleteprintarea': 'delete',
+			'sheetrighttoleft' : 'pararighttoleft',
 			'alignleft': 'leftpara',
 			'alignright': 'rightpara',
 			'alignhorizontalcenter': 'centerpara',
@@ -2191,6 +2217,7 @@ L.Control.JSDialogBuilder = L.Control.extend({
 			'cellverttop': 'aligntop',
 			'scalignmentpropertypanel': 'aligntop',
 			'hyperlinkdialog': 'inserthyperlink',
+			'remotelink': 'inserthyperlink',
 			'openhyperlinkoncursor': 'inserthyperlink',
 			'pageformatdialog': 'pagedialog',
 			'backgroundcolor': 'fillcolor',
@@ -2352,7 +2379,7 @@ L.Control.JSDialogBuilder = L.Control.extend({
 		var isRealUnoCommand = true;
 
 		if (data.command || data.postmessage === true) {
-			var id = data.id ? data.id : (data.text && data.text !== '') ? data.text : data.command;
+			var id = data.id ? data.id : (data.command && data.command !== '') ? data.command : data.text;
 			var isUnoCommand = data.command && data.command.indexOf('.uno:') >= 0;
 			if (isUnoCommand)
 				id = encodeURIComponent(data.command.substr('.uno:'.length));
@@ -2527,6 +2554,8 @@ L.Control.JSDialogBuilder = L.Control.extend({
 				builder.map.dispatch(data.command);
 			});
 		}
+
+		builder._preventDocumentLosingFocusOnClick(control.container);
 	},
 
 	_mapBigDispatchToolItem: function (parentContainer, data, builder) {
@@ -2546,6 +2575,8 @@ L.Control.JSDialogBuilder = L.Control.extend({
 				builder.map.dispatch(data.command);
 			});
 		}
+
+		builder._preventDocumentLosingFocusOnClick(control.container);
 	},
 
 	_divContainerHandler: function (parentContainer, data, builder) {

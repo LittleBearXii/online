@@ -138,16 +138,18 @@ L.Control.NotebookbarCalc = L.Control.NotebookbarWriter.extend({
 					hasShare ?
 						{
 							'id': 'ShareAs',
-							'type': 'menubartoolitem',
+							'type': 'customtoolitem',
 							'text': _('Share'),
-							'command': '.uno:shareas'
+							'command': 'shareas',
+							'inlineLabel': true
 						} : {},
 					hasRevisionHistory ?
 						{
 							'id': 'Rev-History',
-							'type': 'menubartoolitem',
+							'type': 'customtoolitem',
 							'text': _('See history'),
-							'command': '.uno:rev-history'
+							'command': 'rev-history',
+							'inlineLabel': true
 						} : {},
 				],
 				'vertical': 'true'
@@ -470,6 +472,11 @@ L.Control.NotebookbarCalc = L.Control.NotebookbarWriter.extend({
 										'type': 'toolitem',
 										'text': _UNO('.uno:DecrementIndent'),
 										'command': '.uno:DecrementIndent'
+									},
+									{
+										'type': 'toolitem',
+										'text': _UNO('.uno:ParaLeftToRight'),
+										'command': '.uno:ParaLeftToRight'
 									}
 								]
 							}
@@ -508,6 +515,11 @@ L.Control.NotebookbarCalc = L.Control.NotebookbarWriter.extend({
 										'type': 'toolitem',
 										'text': _UNO('.uno:WrapText', 'spreadsheet'),
 										'command': '.uno:WrapText'
+									},
+									{
+										'type': 'toolitem',
+										'text': _UNO('.uno:ParaRightToLeft'),
+										'command': '.uno:ParaRightToLeft'
 									}
 								]
 							}
@@ -759,6 +771,11 @@ L.Control.NotebookbarCalc = L.Control.NotebookbarWriter.extend({
 				'command': '.uno:PageFormatDialog'
 			},
 			{
+				'type': 'bigtoolitem',
+				'text': _UNO('.uno:SheetRightToLeft', 'spreadsheet'),
+				'command': '.uno:SheetRightToLeft'
+			},
+			{
 				'id': 'Data-PrintRangesMenu:MenuPrintRanges',
 				'type': 'menubutton',
 				'text': _UNO('.uno:PrintRangesMenu', 'spreadsheet'),
@@ -952,7 +969,15 @@ L.Control.NotebookbarCalc = L.Control.NotebookbarWriter.extend({
 	},
 
 	getViewTab: function() {
+		var isTablet = window.mode.isTablet();
 		var content = [
+			isTablet ?
+				{
+					'id': 'closemobile',
+					'type': 'bigcustomtoolitem',
+					'text': _('Read mode'),
+					'command': 'closetablet',
+				} : {},
 			{
 				'id': 'fullscreen',
 				'type': 'bigtoolitem',
@@ -1092,10 +1117,16 @@ L.Control.NotebookbarCalc = L.Control.NotebookbarWriter.extend({
 				'vertical': 'true'
 			},
 			{
-				'type': 'bigtoolitem',
+				'id': 'HyperlinkDialog',
+				'type': 'bigcustomtoolitem',
 				'text': _UNO('.uno:HyperlinkDialog'),
-				'command': '.uno:HyperlinkDialog'
+				'command': 'hyperlinkdialog'
 			},
+			(this._map['wopi'].EnableRemoteLinkPicker) ? {
+				'type': 'bigcustomtoolitem',
+				'text': _('Pick Link'),
+				'command': 'remotelink'
+			} : {},
 			{
 				'id': 'Insert-Section-NameRangesTable-Ext',
 				'type': 'container',
@@ -1202,9 +1233,10 @@ L.Control.NotebookbarCalc = L.Control.NotebookbarWriter.extend({
 						'type': 'toolbox',
 						'children': [
 							{
-								'type': 'toolitem',
+								'id': 'CharmapControl',
+								'type': 'customtoolitem',
 								'text': _UNO('.uno:CharmapControl'),
-								'command': '.uno:CharmapControl'
+								'command': 'charmapcontrol'
 							}
 						]
 					},

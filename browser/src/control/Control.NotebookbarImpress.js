@@ -190,16 +190,18 @@ L.Control.NotebookbarImpress = L.Control.NotebookbarWriter.extend({
 					hasShare ?
 						{
 							'id': 'ShareAs',
-							'type': 'menubartoolitem',
+							'type': 'customtoolitem',
 							'text': _('Share'),
-							'command': '.uno:shareas'
+							'command': 'shareas',
+							'inlineLabel': true
 						} : {},
 					hasRevisionHistory ?
 						{
 							'id': 'Rev-History',
-							'type': 'menubartoolitem',
+							'type': 'customtoolitem',
 							'text': _('See history'),
-							'command': '.uno:rev-history'
+							'command': 'rev-history',
+							'inlineLabel': true
 						} : {},
 				],
 				'vertical': 'true'
@@ -325,11 +327,20 @@ L.Control.NotebookbarImpress = L.Control.NotebookbarWriter.extend({
 	},
 
 	getViewTab: function() {
+		var isTablet = window.mode.isTablet();
 		var content = [
+			isTablet ?
+				{
+					'id': 'closemobile',
+					'type': 'bigcustomtoolitem',
+					'text': _('Read mode'),
+					'command': 'closetablet',
+				} : {},
 			{
-				'type': 'bigtoolitem',
+				'id': 'Presentation',
+				'type': 'bigcustomtoolitem',
 				'text': _('Presentation'),
-				'command': '.uno:Presentation'
+				'command': 'presentation'
 			},
 			{
 				'id': 'fullscreen',
@@ -800,9 +811,9 @@ L.Control.NotebookbarImpress = L.Control.NotebookbarWriter.extend({
 				'vertical': 'true'
 			},
 			{
-				'type': 'bigtoolitem',
+				'type': 'bigcustomtoolitem',
 				'text': _('Presentation'),
-				'command': '.uno:Presentation'
+				'command': 'presentation'
 			},
 			{
 				'type': 'bigtoolitem',
@@ -922,10 +933,16 @@ L.Control.NotebookbarImpress = L.Control.NotebookbarWriter.extend({
 				'vertical': 'true'
 			},
 			{
-				'type': 'bigtoolitem',
+				'id': 'HyperlinkDialog',
+				'type': 'bigcustomtoolitem',
 				'text': _UNO('.uno:HyperlinkDialog'),
-				'command': '.uno:HyperlinkDialog'
+				'command': 'hyperlinkdialog'
 			},
+			(this._map['wopi'].EnableRemoteLinkPicker) ? {
+				'type': 'bigcustomtoolitem',
+				'text': _('Pick Link'),
+				'command': 'remotelink'
+			} : {},
 			{
 				'type': 'container',
 				'children': [
@@ -1048,9 +1065,10 @@ L.Control.NotebookbarImpress = L.Control.NotebookbarWriter.extend({
 						'type': 'toolbox',
 						'children': [
 							{
-								'type': 'toolitem',
+								'id': 'CharmapControl',
+								'type': 'customtoolitem',
 								'text': _UNO('.uno:CharmapControl'),
-								'command': '.uno:CharmapControl'
+								'command': 'charmapcontrol'
 							}
 						]
 					},

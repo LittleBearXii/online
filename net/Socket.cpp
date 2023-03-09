@@ -68,6 +68,7 @@ int Socket::createSocket(Socket::Type type)
 
     return socket(domain, SOCK_STREAM | SOCK_NONBLOCK, 0);
 #else
+    (void) type;
     return fakeSocketSocket();
 #endif
 }
@@ -431,8 +432,8 @@ int SocketPoll::poll(int64_t timeoutMaxMicroS)
         std::vector<int> toErase;
 
         size_t i = _pollStartIndex;
-        LOG_TRC('#' << _pollFds[i].fd << ": Starting handling poll results of " << _name
-                    << " at index " << i << " (of " << size << "): " << std::hex
+        LOG_TRC('#' << _pollFds[i].fd << ": Starting handling poll events of " << _name
+                    << " at index " << i << " (of " << size << "): 0x" << std::hex
                     << _pollFds[i].revents << std::dec);
 
         for (std::size_t j = 0; j < size; ++j)
@@ -801,6 +802,9 @@ bool ServerSocket::bind(Type type, int port)
 
     return rc == 0;
 #else
+    (void) type;
+    (void) port;
+
     return true;
 #endif
 }
@@ -949,8 +953,8 @@ std::shared_ptr<Socket> LocalServerSocket::accept()
         addr.append(std::to_string(CREDS_PID(creds)));
         _socket->setClientAddress(addr);
 
-        LOG_DBG("Accepted socket is UDS - address " << addr <<
-                " and uid/gid " << CREDS_UID(creds) << '/' << CREDS_GID(creds));
+        LOG_DBG("Accepted socket #" << rc << " is UDS - address " << addr << " and uid/gid "
+                                    << CREDS_UID(creds) << '/' << CREDS_GID(creds));
         return _socket;
     }
     catch (const std::exception& ex)

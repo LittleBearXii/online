@@ -153,16 +153,18 @@ L.Control.NotebookbarDraw = L.Control.NotebookbarImpress.extend({
 					hasShare ?
 						{
 							'id': 'ShareAs',
-							'type': 'menubartoolitem',
+							'type': 'customtoolitem',
 							'text': _('Share'),
-							'command': '.uno:shareas'
+							'command': 'shareas',
+							'inlineLabel': true
 						} : {},
 					hasRevisionHistory ?
 						{
 							'id': 'Rev-History',
-							'type': 'menubartoolitem',
+							'type': 'customtoolitem',
 							'text': _('See history'),
-							'command': '.uno:rev-history'
+							'command': 'rev-history',
+							'inlineLabel': true
 						} : {},
 				],
 				'vertical': 'true'
@@ -231,7 +233,15 @@ L.Control.NotebookbarDraw = L.Control.NotebookbarImpress.extend({
 	},
 
 	getViewTab: function() {
+		var isTablet = window.mode.isTablet();
 		var content = [
+			isTablet ?
+				{
+					'id': 'closemobile',
+					'type': 'bigcustomtoolitem',
+					'text': _('Read mode'),
+					'command': 'closetablet',
+				} : {},
 			{
 				'id': 'fullscreen',
 				'type': 'bigtoolitem',
@@ -912,10 +922,16 @@ L.Control.NotebookbarDraw = L.Control.NotebookbarImpress.extend({
 				'vertical': 'true'
 			},
 			{
-				'type': 'bigtoolitem',
+				'id': 'HyperlinkDialog',
+				'type': 'bigcustomtoolitem',
 				'text': _UNO('.uno:HyperlinkDialog'),
-				'command': '.uno:HyperlinkDialog'
+				'command': 'hyperlinkdialog'
 			},
+			(this._map['wopi'].EnableRemoteLinkPicker) ? {
+				'type': 'bigcustomtoolitem',
+				'text': _('Pick Link'),
+				'command': 'remotelink'
+			} : {},
 			{
 				'type': 'container',
 				'children': [
@@ -1033,9 +1049,10 @@ L.Control.NotebookbarDraw = L.Control.NotebookbarImpress.extend({
 						'type': 'toolbox',
 						'children': [
 							{
-								'type': 'toolitem',
+								'id': 'CharmapControl',
+								'type': 'customtoolitem',
 								'text': _UNO('.uno:CharmapControl'),
-								'command': '.uno:CharmapControl'
+								'command': 'charmapcontrol'
 							}
 						]
 					},

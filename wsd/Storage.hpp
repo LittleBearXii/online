@@ -52,7 +52,12 @@ struct LockContext
     /// Reason for unsuccessful locking request
     std::string _lockFailureReason;
 
-    LockContext() : _supportsLocks(false), _isLocked(false) { }
+    LockContext()
+        : _supportsLocks(false)
+        , _isLocked(false)
+        , _refreshSeconds(COOLWSD::getConfigValue<int>("storage.wopi.locking.refresh", 900))
+    {
+    }
 
     /// one-time setup for supporting locks & create token
     void initSupportsLocks();
@@ -61,6 +66,9 @@ struct LockContext
     bool needsRefresh(const std::chrono::steady_clock::time_point &now) const;
 
     void dumpState(std::ostream& os) const;
+
+private:
+    const std::chrono::seconds _refreshSeconds;
 };
 
 /// Base class of all Storage abstractions.
@@ -333,9 +341,16 @@ public:
 
     std::string getFileExtension() const { return Poco::Path(_fileInfo.getFilename()).getExtension(); }
 
+    STATE_ENUM(LockUpdateResult,
+               UNSUPPORTED, //< Locking is not supported on this host.
+               OK, //< Succeeded to either lock or unlock (see LockContext).
+               UNAUTHORIZED, //< 401, 403, 404.
+               FAILED //< Other failures.
+    );
+
     /// Update the locking state (check-in/out) of the associated file
-    virtual bool updateLockState(const Authorization& auth, LockContext& lockCtx, bool lock,
-                                 const Attributes& attribs) = 0;
+    virtual LockUpdateResult updateLockState(const Authorization& auth, LockContext& lockCtx,
+                                             bool lock, const Attributes& attribs) = 0;
 
     /// Returns a local file path for the given URI.
     /// If necessary copies the file locally first.
@@ -431,11 +446,16 @@ public:
     LocalStorage(const Poco::URI& uri, const std::string& localStorePath,
                  const std::string& jailPath, bool isTemporaryFile)
         : StorageBase(uri, localStorePath, jailPath)
+#if !MOBILEAPP
         , _isTemporaryFile(isTemporaryFile)
+#endif
         , _isCopy(false)
     {
         LOG_INF("LocalStorage ctor with localStorePath: [" << localStorePath <<
                 "], jailPath: [" << jailPath << "], uri: [" << COOLWSD::anonymizeUrl(uri.toString()) << "].");
+#if MOBILEAPP
+        (void) isTemporaryFile;
+#endif
     }
 
     class LocalFileInfo
@@ -461,9 +481,10 @@ public:
     /// obtained using getFileInfo method
     std::unique_ptr<LocalFileInfo> getLocalFileInfo();
 
-    bool updateLockState(const Authorization&, LockContext&, bool, const Attributes&) override
+    LockUpdateResult updateLockState(const Authorization&, LockContext&, bool,
+                                     const Attributes&) override
     {
-        return true;
+        return LockUpdateResult::OK;
     }
 
     std::string downloadStorageFileToLocal(const Authorization& auth, LockContext& lockCtx,
@@ -476,9 +497,11 @@ public:
                                        const AsyncUploadCallback& asyncUploadCallback) override;
 
 private:
+#if !MOBILEAPP
     /// True if we the source file a temporary that we own.
     /// Typically for convert-to requests.
     const bool _isTemporaryFile;
+#endif
     /// True if the jailed file is not linked but copied.
     bool _isCopy;
     static std::atomic<unsigned> LastLocalStorageId;
@@ -540,6 +563,7 @@ public:
         bool getDownloadAsPostMessage() const { return _downloadAsPostMessage; }
         bool getUserCanNotWriteRelative() const { return _userCanNotWriteRelative; }
         bool getEnableInsertRemoteImage() const { return _enableInsertRemoteImage; }
+        bool getEnableRemoteLinkPicker() const { return _enableRemoteLinkPicker; }
         bool getEnableShare() const { return _enableShare; }
         bool getSupportsRename() const { return _supportsRename; }
         bool getSupportsLocks() const { return _supportsLocks; }
@@ -597,6 +621,8 @@ public:
         bool _userCanNotWriteRelative;
         /// If set to true, users can access the insert remote image functionality
         bool _enableInsertRemoteImage;
+        /// If set to true, users can access the remote link picker functionality
+        bool _enableRemoteLinkPicker;
         /// If set to true, users can access the file share functionality
         bool _enableShare;
         /// If set to "true", user list on the status bar will be hidden
@@ -630,8 +656,8 @@ public:
                                                         unsigned redirectLimit);
 
     /// Update the locking state (check-in/out) of the associated file
-    bool updateLockState(const Authorization& auth, LockContext& lockCtx, bool lock,
-                         const Attributes& attribs) override;
+    LockUpdateResult updateLockState(const Authorization& auth, LockContext& lockCtx, bool lock,
+                                     const Attributes& attribs) override;
 
     /// uri format: http://server/<...>/wopi*/files/<id>/content
     std::string downloadStorageFileToLocal(const Authorization& auth, LockContext& lockCtx,

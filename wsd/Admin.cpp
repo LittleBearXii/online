@@ -375,14 +375,14 @@ bool AdminSocketHandler::handleInitialRequest(
 {
     if (!COOLWSD::AdminEnabled)
     {
-        LOG_ERR("Request for disabled admin console");
+        LOG_ERR_S("Request for disabled admin console");
         return false;
     }
 
     std::shared_ptr<StreamSocket> socket = socketWeak.lock();
     if (!socket)
     {
-        LOG_ERR("Invalid socket while reading initial request.");
+        LOG_ERR_S("Invalid socket while reading initial request");
         return false;
     }
 
@@ -403,7 +403,7 @@ bool AdminSocketHandler::handleInitialRequest(
     HTTPResponse response;
     response.setStatusAndReason(HTTPResponse::HTTP_BAD_REQUEST);
     response.setContentLength(0);
-    LOG_INF("Admin::handleInitialRequest bad request");
+    LOG_INF_S("Admin::handleInitialRequest bad request");
     socket->send(response);
 
     return false;
@@ -916,11 +916,13 @@ void MonitorSocketHandler::onDisconnect()
     // schedule monitor reconnect only if monitor uri exist in configuration
     for (std::string uri : Admin::instance().getMonitorList())
     {
-        if (Util::iequal(uri, _uri.substr(0, _uri.find('?'))))
+        const std::string uriWithoutParam = _uri.substr(0, _uri.find('?'));
+        if (Util::iequal(uri, uriWithoutParam))
         {
             LOG_ERR("Monitor " << _uri << " dis-connected, re-trying in 20 seconds");
             Admin::instance().scheduleMonitorConnect(_uri, std::chrono::steady_clock::now() +
-                                                                std::chrono::seconds(20));
+                                                               std::chrono::seconds(20));
+            Admin::instance().deleteMonitorSocket(uriWithoutParam);
             reconnect = true;
             break;
         }
@@ -934,7 +936,10 @@ void Admin::connectToMonitorSync(const std::string &uri)
 {
     const std::string uriWithoutParam = uri.substr(0, uri.find('?'));
     if (_monitorSockets.find(uriWithoutParam) != _monitorSockets.end())
+    {
+        LOG_TRC("Monitor connection with uri:" << uri << " already exist");
         return;
+    }
 
     LOG_TRC("Add monitor " << uri);
     auto handler = std::make_shared<MonitorSocketHandler>(this, uri);
@@ -1052,6 +1057,14 @@ void Admin::updateMonitors(std::vector<std::string>& oldMonitors)
     }
 
     startMonitors();
+}
+
+void Admin::deleteMonitorSocket(const std::string& uriWithoutParam)
+{
+    if (_monitorSockets.find(uriWithoutParam) != _monitorSockets.end())
+    {
+        _monitorSockets.erase(uriWithoutParam);
+    }
 }
 
 void Admin::stop()

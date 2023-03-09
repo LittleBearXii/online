@@ -38,7 +38,7 @@ L.Control.Zotero = L.Control.extend({
 	onAdd: function (map) {
 		this.map = map;
 		this.enable = false;
-		this.map.on('updateviewslist', this.onUpdateViews, this);
+		this.fetchStyle();
 	},
 
 	extractItemKeyFromLink: function(link) {
@@ -121,25 +121,12 @@ L.Control.Zotero = L.Control.extend({
 
 	},
 
-	onRemove: function () {
-		this.map.off('updateviewslist', this.onUpdateViews, this);
-	},
-
 	askForApiKey: function () {
 		this.map.fire('postMessage', {msgId: 'UI_ZoteroKeyMissing'});
 		// if empty - integrator supports Zotero and will ask user to provide the key
 		// if undefined/null - integrator doesn't have feature yet - show the warning
 		if (this.apiKey !== '')
 			this.map.uiManager.showSnackbar(_('Zotero API key is not configured'));
-	},
-
-	onUpdateViews: function () {
-		var userPrivateInfo = this.map._docLayer ? this.map._viewInfo[this.map._docLayer._viewId].userprivateinfo : null;
-		if (userPrivateInfo) {
-			this.apiKey = userPrivateInfo.ZoteroAPIKey;
-			if (this.apiKey)
-				this.updateUserID();
-		}
 	},
 
 	updateUserID: function () {
@@ -1287,6 +1274,9 @@ L.Control.Zotero = L.Control.extend({
 		}
 
 		if (!(this.citations && Object.keys(this.citations)))
+			return;
+
+		if (this.getCitationKeys().length === 0)
 			return;
 
 		var that = this;

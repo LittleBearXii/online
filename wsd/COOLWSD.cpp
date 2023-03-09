@@ -374,6 +374,8 @@ void COOLWSD::checkDiskSpaceAndWarnClients(const bool cacheLastCheck)
     {
         LOG_ERR("Exception while checking disk-space and warning clients: " << exc.what());
     }
+#else
+    (void) cacheLastCheck;
 #endif
 }
 
@@ -479,7 +481,9 @@ static int rebalanceChildren(int balance)
 {
     Util::assertIsLocked(NewChildrenMutex);
 
-    LOG_TRC("rebalance children to " << balance);
+    const size_t available = NewChildren.size();
+    LOG_TRC("Rebalance children to " << balance << ", have " << available << " and "
+                                     << OutstandingForks << " outstanding requests");
 
     // Do the cleanup first.
     const bool rebalance = cleanupChildren();
@@ -495,15 +499,15 @@ static int rebalanceChildren(int balance)
         OutstandingForks = 0;
     }
 
-    const size_t available = NewChildren.size();
     balance -= available;
     balance -= OutstandingForks;
 
     if (balance > 0 && (rebalance || OutstandingForks == 0))
     {
-        LOG_DBG("prespawnChildren: Have " << available << " spare " <<
-                (available == 1 ? "child" : "children") << ", and " <<
-                OutstandingForks << " outstanding, forking " << balance << " more.");
+        LOG_DBG("prespawnChildren: Have " << available << " spare "
+                                          << (available == 1 ? "child" : "children") << ", and "
+                                          << OutstandingForks << " outstanding, forking " << balance
+                                          << " more. Time since last request: " << durationMs);
         return forkChildren(balance);
     }
 
@@ -541,7 +545,8 @@ static size_t addNewChild(std::shared_ptr<ChildProcess> child)
         ChildSpawnTimeoutMs = CHILD_TIMEOUT_MS;
     }
 
-    LOG_TRC("Adding a new child " << pid << " to NewChildren");
+    LOG_TRC("Adding a new child " << pid << " to NewChildren, have " << OutstandingForks
+                                  << " outstanding requests");
     NewChildren.emplace_back(std::move(child));
     const size_t count = NewChildren.size();
     lock.unlock();
@@ -561,16 +566,16 @@ std::mutex COOLWSD::lokit_main_mutex;
 
 std::shared_ptr<ChildProcess> getNewChild_Blocks(unsigned mobileAppDocId)
 {
-    std::unique_lock<std::mutex> lock(NewChildrenMutex);
-
     const auto startTime = std::chrono::steady_clock::now();
+
+    std::unique_lock<std::mutex> lock(NewChildrenMutex);
 
 #if !MOBILEAPP
     (void) mobileAppDocId;
 
-    LOG_DBG("getNewChild: Rebalancing children.");
     int numPreSpawn = COOLWSD::NumPreSpawnedChildren;
     ++numPreSpawn; // Replace the one we'll dispatch just now.
+    LOG_DBG("getNewChild: Rebalancing children to " << numPreSpawn);
     if (rebalanceChildren(numPreSpawn) < 0)
     {
         LOG_DBG("getNewChild: rebalancing of children failed. Scheduling housekeeping to recover.");
@@ -2679,6 +2684,8 @@ void COOLWSD::innerInitialize(Application& self)
     std::cerr << std::endl;
 #endif
 
+#else
+    (void) self;
 #endif
 }
 
@@ -2848,6 +2855,8 @@ void COOLWSD::defineOptions(OptionSet& optionSet)
                         .repeatable(false));
 #endif
 
+#else
+    (void) optionSet;
 #endif
 }
 
@@ -2915,6 +2924,10 @@ void COOLWSD::handleOption(const std::string& optionName,
     if (latencyMs)
         SimulatedLatencyMs = std::stoi(latencyMs);
 #endif
+
+#else
+    (void) optionName;
+    (void) value;
 #endif
 }
 
@@ -3340,7 +3353,7 @@ public:
         , _pid(0)
         , _socketFD(0)
     {
-        LOG_TRC("PrisonerRequestDispatcher");
+        LOG_TRC_S("PrisonerRequestDispatcher");
     }
     ~PrisonerRequestDispatcher()
     {
@@ -3360,13 +3373,13 @@ private:
     /// Keep our socket around ...
     void onConnect(const std::shared_ptr<StreamSocket>& socket) override
     {
-        setSocket(socket);
-        LOG_TRC('#' << socket->getFD() << " Prisoner connected.");
+        WebSocketHandler::onConnect(socket);
+        LOG_TRC("Prisoner connected");
     }
 
     void onDisconnect() override
     {
-        LOG_DBG('#' << _socketFD << " Prisoner connection disconnected");
+        LOG_DBG("Prisoner connection disconnected");
 
         // Notify the broker that we're done.
         std::shared_ptr<ChildProcess> child = _childProcess.lock();
@@ -3441,13 +3454,17 @@ private:
 #endif
             if (requestURI.getPath() != NEW_CHILD_URI)
             {
-                LOG_ERR("Invalid incoming URI.");
+                LOG_ERR("Invalid incoming child URI [" << requestURI.getPath() << ']');
                 return;
             }
 
+            const auto duration = (std::chrono::steady_clock::now() - LastForkRequestTime);
+            const auto durationMs = std::chrono::duration_cast<std::chrono::milliseconds>(duration);
+            LOG_TRC("New child spawned after " << durationMs << " of requesting");
+
             // New Child is spawned.
             const Poco::URI::QueryParameters params = requestURI.getQueryParameters();
-            int pid = socket->getPid();
+            const int pid = socket->getPid();
             std::string jailId;
             for (const auto& param : params)
             {
@@ -3492,7 +3509,9 @@ private:
             // Remove from prisoner poll since there is no activity
             // until we attach the childProcess (with this socket)
             // to a docBroker, which will do the polling.
-            disposition.setMove([child](const std::shared_ptr<Socket> &){
+            disposition.setMove(
+                [this, child](const std::shared_ptr<Socket>&)
+                {
                     LOG_TRC("Calling addNewChild in disposition's move thing to add to NewChildren");
                     addNewChild(child);
                 });
@@ -3520,7 +3539,7 @@ private:
         if (socket)
         {
             assert(socket->getFD() == _socketFD && "Socket FD changed unexpectedly");
-            LOG_TRC('#' << socket->getFD() << " Prisoner message [" << message->abbr() << ']');
+            LOG_TRC("Prisoner message [" << message->abbr() << ']');
         }
         else
             LOG_WRN("Message handler called but without valid socket. Expected #" << _socketFD);
@@ -3604,7 +3623,7 @@ public:
                 const auto host = app.config().getString(path, "");
                 if (!host.empty())
                 {
-                    LOG_INF("Adding trusted POST_ALLOW host: [" << host << "].");
+                    LOG_INF_S("Adding trusted POST_ALLOW host: [" << host << ']');
                     hosts.allow(host);
                 }
                 else if (!app.config().has(path))
@@ -3624,18 +3643,18 @@ public:
         std::string hostToCheck = request.getHost();
         bool allow = allowPostFrom(addressToCheck) || HostUtil::allowedWopiHost(hostToCheck);
 
-        if(!allow)
+        if (!allow)
         {
-            LOG_WRN("convert-to: Requesting address is denied: " << addressToCheck);
+            LOG_WRN_S("convert-to: Requesting address is denied: " << addressToCheck);
             return false;
         }
         else
         {
-            LOG_TRC("convert-to: Requesting address is allowed: " << addressToCheck);
+            LOG_TRC_S("convert-to: Requesting address is allowed: " << addressToCheck);
         }
 
         // Handle forwarded header and make sure all participating IPs are allowed
-        if(request.has("X-Forwarded-For"))
+        if (request.has("X-Forwarded-For"))
         {
             const std::string fowardedData = request.get("X-Forwarded-For");
             StringVector tokens = StringVector::tokenize(fowardedData, ',');
@@ -3653,18 +3672,19 @@ public:
                 }
                 catch (const Poco::Exception& exc)
                 {
-                    LOG_ERR("Poco::Net::DNS::resolve(\"" << addressToCheck << "\") failed: " << exc.displayText());
+                    LOG_ERR_S("Poco::Net::DNS::resolve(\"" << addressToCheck
+                                                           << "\") failed: " << exc.displayText());
                     // We can't find out the hostname, and it already failed the IP check
                     allow = false;
                 }
-                if(!allow)
+                if (!allow)
                 {
-                    LOG_WRN("convert-to: Requesting address is denied: " << addressToCheck);
+                    LOG_WRN_S("convert-to: Requesting address is denied: " << addressToCheck);
                     return false;
                 }
                 else
                 {
-                    LOG_INF("convert-to: Requesting address is allowed: " << addressToCheck);
+                    LOG_INF_S("convert-to: Requesting address is allowed: " << addressToCheck);
                 }
             }
         }
@@ -3678,7 +3698,8 @@ private:
     {
         _id = COOLWSD::GetConnectionId();
         _socket = socket;
-        LOG_TRC('#' << socket->getFD() << " Connected to ClientRequestDispatcher.");
+        setLogContext(socket->getFD());
+        LOG_TRC("Connected to ClientRequestDispatcher");
     }
 
     /// Called after successful socket reads.
@@ -3992,7 +4013,7 @@ private:
     {
         assert(socket && "Must have a valid socket");
 
-        LOG_TRC("Favicon request: " << requestDetails.getURI());
+        LOG_TRC_S("Favicon request: " << requestDetails.getURI());
         const std::string mimeType = "image/vnd.microsoft.icon";
         std::string faviconPath = Path(Application::instance().commandPath()).parent().toString() + "favicon.ico";
         if (!File(faviconPath).exists())
@@ -4054,8 +4075,8 @@ private:
     {
         assert(socket && "Must have a valid socket");
 
-        LOG_DBG("Clipboard " << ((request.getMethod() == HTTPRequest::HTTP_GET) ? "GET" : "POST") <<
-                " request: " << request.getURI());
+        LOG_DBG_S("Clipboard " << ((request.getMethod() == HTTPRequest::HTTP_GET) ? "GET" : "POST")
+                               << " request: " << request.getURI());
 
         Poco::URI requestUri(request.getURI());
         Poco::URI::QueryParameters params = requestUri.getQueryParameters();
@@ -4073,15 +4094,13 @@ private:
             else if (it.first == "MimeType")
                 mime = it.second;
         }
-        LOG_TRC("Clipboard request for us: " << serverId << " with tag " << tag);
+        LOG_TRC_S("Clipboard request for us: " << serverId << " with tag " << tag);
 
         if (serverId != Util::getProcessIdentifier())
         {
-            const std::string errMsg = "Cluster configuration error: mis-matching "
-                                       "serverid "
-                                       + serverId + " vs. " + Util::getProcessIdentifier()
-                                       + "on request to URL: " + request.getURI();
-            LOG_ERR(errMsg);
+            LOG_ERR_S("Cluster configuration error: mis-matching serverid "
+                      << serverId << " vs. " << Util::getProcessIdentifier()
+                      << "on request to URL: " << request.getURI());
 
             // we got the wrong request.
             http::Response httpResponse(http::StatusCode::BadRequest);
@@ -4125,23 +4144,26 @@ private:
                 HTMLForm form(request, message, handler);
                 data = handler.getData();
                 if (!data || data->length() == 0)
-                    LOG_ERR("Invalid zero size set clipboard content");
+                    LOG_ERR_S("Invalid zero size set clipboard content");
             }
             // Do things in the right thread.
-            LOG_TRC("Move clipboard request " << tag << " to docbroker thread with data: " <<
-                    (data ? data->length() : 0) << " bytes");
-            docBroker->setupTransfer(disposition, [=] (const std::shared_ptr<Socket> &moveSocket)
+            LOG_TRC_S("Move clipboard request " << tag << " to docbroker thread with data: "
+                                                << (data ? data->length() : 0) << " bytes");
+            docBroker->setupTransfer(
+                disposition,
+                [docBroker, type, viewId, tag, data](const std::shared_ptr<Socket>& moveSocket)
                 {
                     auto streamSocket = std::static_pointer_cast<StreamSocket>(moveSocket);
                     docBroker->handleClipboardRequest(type, streamSocket, viewId, tag, data);
                 });
-            LOG_TRC("queued clipboard command " << type << " on docBroker fetch");
+            LOG_TRC_S("queued clipboard command " << type << " on docBroker fetch");
         }
         // fallback to persistent clipboards if we can
         else if (!DocumentBroker::lookupSendClipboardTag(socket, tag, false))
         {
-            LOG_ERR("Invalid clipboard request: " << serverId << " with tag " << tag <<
-                    " and broker: " << (docBroker ? "" : "not ") << "found");
+            LOG_ERR_S("Invalid clipboard request: " << serverId << " with tag " << tag
+                                                    << " and broker: " << (docBroker ? "" : "not ")
+                                                    << "found");
 
             std::string errMsg = "Empty clipboard item / session tag " + tag;
 
@@ -4155,7 +4177,7 @@ private:
     {
         assert(socket && "Must have a valid socket");
 
-        LOG_DBG("HTTP request: " << request.getURI());
+        LOG_DBG_S("HTTP request: " << request.getURI());
         const std::string responseString = "User-agent: *\nDisallow: /\n";
 
         http::Response httpResponse(http::StatusCode::OK);
@@ -4171,7 +4193,7 @@ private:
         }
 
         socket->shutdown();
-        LOG_INF("Sent robots.txt response successfully.");
+        LOG_INF_S("Sent robots.txt response successfully");
     }
 
     static void handleMediaRequest(const Poco::Net::HTTPRequest& request,
@@ -4180,7 +4202,7 @@ private:
     {
         assert(socket && "Must have a valid socket");
 
-        LOG_DBG("Media request: " << request.getURI());
+        LOG_DBG_S("Media request: " << request.getURI());
 
         std::string decoded;
         Poco::URI::decode(request.getURI(), decoded);
@@ -4200,15 +4222,15 @@ private:
             else if (it.first == "MimeType")
                 mime = it.second;
         }
-        LOG_TRC("Media request for us: " << serverId << " with tag " << tag);
+
+        LOG_TRC_S("Media request for us: [" << serverId << "] with tag [" << tag << "] and viewId ["
+                                            << viewId << ']');
 
         if (serverId != Util::getProcessIdentifier())
         {
-            const std::string errMsg = "Cluster configuration error: mis-matching "
-                                       "serverid ["
-                                       + serverId + "] vs. [" + Util::getProcessIdentifier()
-                                       + "] on request to URL: " + request.getURI();
-            LOG_ERR(errMsg);
+            LOG_ERR_S("Cluster configuration error: mis-matching serverid ["
+                      << serverId << "] vs. [" << Util::getProcessIdentifier()
+                      << "] on request to URL: " << request.getURI());
 
             // we got the wrong request.
             http::Response httpResponse(http::StatusCode::BadRequest);
@@ -4219,6 +4241,9 @@ private:
         }
 
         const auto docKey = RequestDetails::getDocKey(WOPISrc);
+        LOG_TRC_S("Looking up DocBroker with docKey [" << docKey << "] referenced in WOPISrc ["
+                                                       << WOPISrc
+                                                       << "] in media URL: " + request.getURI());
 
         std::shared_ptr<DocumentBroker> docBroker;
         {
@@ -4226,9 +4251,9 @@ private:
             auto it = DocBrokers.find(docKey);
             if (it == DocBrokers.end())
             {
-                const std::string errMsg =
-                    "Unknown DocBroker reference in media URL: " + request.getURI();
-                LOG_ERR(errMsg);
+                LOG_ERR_S("Unknown DocBroker with docKey ["
+                          << docKey << "] referenced in WOPISrc [" << WOPISrc
+                          << "] in media URL: " + request.getURI());
 
                 http::Response httpResponse(http::StatusCode::BadRequest);
                 httpResponse.set("Content-Length", "0");
@@ -4249,7 +4274,7 @@ private:
         if (docBroker && docBroker->isAlive())
         {
             // Do things in the right thread.
-            LOG_TRC("Move media request " << tag << " to docbroker thread");
+            LOG_TRC_S("Move media request " << tag << " to docbroker thread");
             docBroker->handleMediaRequest(socket, tag);
         }
     }
@@ -4715,8 +4740,9 @@ private:
                                     (const std::shared_ptr<Socket> &moveSocket)
                 {
                     // Now inside the document broker thread ...
-                    LOG_TRC("In the docbroker thread for " << docBroker->getDocKey());
+                    LOG_TRC_S("In the docbroker thread for " << docBroker->getDocKey());
 
+                    const int fd = moveSocket->getFD();
                     auto streamSocket = std::static_pointer_cast<StreamSocket>(moveSocket);
                     try
                     {
@@ -4727,15 +4753,21 @@ private:
                     }
                     catch (const UnauthorizedRequestException& exc)
                     {
-                        LOG_ERR("Unauthorized Request while loading session for " << docBroker->getDocKey() << ": " << exc.what());
+                        LOG_ERR_S("Unauthorized Request while starting session on "
+                                  << docBroker->getDocKey() << " for socket #" << fd
+                                  << ". Terminating connection. Error: " << exc.what());
                     }
                     catch (const StorageConnectionException& exc)
                     {
-                        LOG_ERR("Error while loading : " << exc.what());
+                        LOG_ERR_S("Storage error while starting session on "
+                                  << docBroker->getDocKey() << " for socket #" << fd
+                                  << ". Terminating connection. Error: " << exc.what());
                     }
                     catch (const std::exception& exc)
                     {
-                        LOG_ERR("Error while loading : " << exc.what());
+                        LOG_ERR_S("Error while starting session on "
+                                  << docBroker->getDocKey() << " for socket #" << fd
+                                  << ". Terminating connection. Error: " << exc.what());
                     }
                     // badness occurred:
                     HttpHelper::sendErrorAndShutdown(400, streamSocket);
@@ -4829,7 +4861,8 @@ private:
                             // Set WebSocketHandler's socket after its construction for shared_ptr goodness.
                             streamSocket->setHandler(ws);
 
-                            LOG_DBG('#' << moveSocket->getFD() << " handler is " << clientSession->getName());
+                            LOG_DBG_S('#' << moveSocket->getFD() << " handler is "
+                                          << clientSession->getName());
 
                             // Add and load the session.
                             docBroker->addSession(clientSession);
@@ -4843,30 +4876,30 @@ private:
                         }
                         catch (const UnauthorizedRequestException& exc)
                         {
-                            LOG_ERR("Unauthorized Request while starting session on "
-                                    << docBroker->getDocKey() << " for socket #"
-                                    << moveSocket->getFD()
-                                    << ". Terminating connection. Error: " << exc.what());
+                            LOG_ERR_S("Unauthorized Request while starting session on "
+                                      << docBroker->getDocKey() << " for socket #"
+                                      << moveSocket->getFD()
+                                      << ". Terminating connection. Error: " << exc.what());
                             const std::string msg = "error: cmd=internal kind=unauthorized";
                             ws->shutdown(WebSocketHandler::StatusCodes::POLICY_VIOLATION, msg);
                             moveSocket->ignoreInput();
                         }
                         catch (const StorageConnectionException& exc)
                         {
-                            LOG_ERR("Storage error while starting session on "
-                                    << docBroker->getDocKey() << " for socket #"
-                                    << moveSocket->getFD()
-                                    << ". Terminating connection. Error: " << exc.what());
+                            LOG_ERR_S("Storage error while starting session on "
+                                      << docBroker->getDocKey() << " for socket #"
+                                      << moveSocket->getFD()
+                                      << ". Terminating connection. Error: " << exc.what());
                             const std::string msg = "error: cmd=storage kind=loadfailed";
                             ws->shutdown(WebSocketHandler::StatusCodes::POLICY_VIOLATION, msg);
                             moveSocket->ignoreInput();
                         }
                         catch (const std::exception& exc)
                         {
-                            LOG_ERR("Error while starting session on "
-                                    << docBroker->getDocKey() << " for socket #"
-                                    << moveSocket->getFD()
-                                    << ". Terminating connection. Error: " << exc.what());
+                            LOG_ERR_S("Error while starting session on "
+                                      << docBroker->getDocKey() << " for socket #"
+                                      << moveSocket->getFD()
+                                      << ". Terminating connection. Error: " << exc.what());
                             const std::string msg = "error: cmd=storage kind=loadfailed";
                             ws->shutdown(WebSocketHandler::StatusCodes::POLICY_VIOLATION, msg);
                             moveSocket->ignoreInput();
@@ -4928,7 +4961,7 @@ private:
         const std::string uriBaseValue = rootUriValue + "/browser/" COOLWSD_VERSION_HASH "/";
         const std::string uriValue = uriBaseValue + "cool.html?";
 
-        LOG_DBG("Processing discovery.xml from " << discoveryPath);
+        LOG_DBG_S("Processing discovery.xml from " << discoveryPath);
         InputSource inputSrc(discoveryPath);
         DOMParser parser;
         AutoPtr<Poco::XML::Document> docXML = parser.parse(&inputSrc);
@@ -4952,13 +4985,13 @@ private:
             {
                 const std::string ext = elem->getAttribute("ext");
                 if (COOLWSD::EditFileExtensions.insert(ext).second) // Skip duplicates.
-                    LOG_DBG("Enabling editing of [" << ext << "] extension files");
+                    LOG_DBG_S("Enabling editing of [" << ext << "] extension files");
             }
             else if (elem->getAttribute("name") == "view_comment")
             {
                 const std::string ext = elem->getAttribute("ext");
                 if (COOLWSD::ViewWithCommentsFileExtensions.insert(ext).second) // Skip duplicates.
-                    LOG_DBG("Enabling commenting on [" << ext << "] extension files");
+                    LOG_DBG_S("Enabling commenting on [" << ext << "] extension files");
             }
         }
 
@@ -5337,7 +5370,7 @@ private:
         ClientPortNumber = port;
 
 #if !MOBILEAPP
-        LOG_INF('#' << socket->getFD() << "Listening to client connections on port " << port);
+        LOG_INF('#' << socket->getFD() << " Listening to client connections on port " << port);
 #else
         LOG_INF("Listening to client connections on #" << socket->getFD());
 #endif

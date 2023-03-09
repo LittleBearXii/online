@@ -462,10 +462,6 @@ bool ClientSession::_handleInput(const char *buffer, int length)
         // Keep track of timestamps of incoming client messages that indicate user activity.
         updateLastActivityTime();
         docBroker->updateLastActivityTime();
-        if (COOLProtocol::tokenIndicatesDocumentModification(tokens[0]))
-        {
-            docBroker->updateLastModifyingActivityTime();
-        }
 
         if (isEditable() && isViewLoaded())
         {
@@ -473,6 +469,7 @@ bool ClientSession::_handleInput(const char *buffer, int length)
             docBroker->updateEditingSessionId(getId());
         }
     }
+
     if (tokens.equals(0, "coolclient"))
     {
         if (tokens.size() < 2)
@@ -492,13 +489,13 @@ bool ClientSession::_handleInput(const char *buffer, int length)
         _performanceCounterEpoch = 0;
         if (tokens.size() >= 4)
         {
-            std::string timestamp = tokens[2];
+            const std::string timestamp = tokens[2];
             const char* str = timestamp.c_str();
             char* endptr = nullptr;
             uint64_t ts = strtoull(str, &endptr, 10);
             if (*endptr == '\0')
             {
-                std::string perfcounter = tokens[3].data();
+                const std::string perfcounter = tokens[3];
                 str = perfcounter.data();
                 endptr = nullptr;
                 double counter = strtod(str, &endptr);
@@ -791,6 +788,7 @@ bool ClientSession::_handleInput(const char *buffer, int length)
             }
             else
             {
+                docBroker->updateLastModifyingActivityTime();
                 return forwardToChild(std::string(buffer, length), docBroker);
             }
         }
@@ -1026,6 +1024,11 @@ bool ClientSession::_handleInput(const char *buffer, int length)
     {
         if (tokens.equals(0, "key"))
             _keyEvents++;
+
+        if (COOLProtocol::tokenIndicatesDocumentModification(tokens))
+        {
+            docBroker->updateLastModifyingActivityTime();
+        }
 
         if (!filterMessage(firstLine))
         {
@@ -1336,8 +1339,10 @@ bool ClientSession::filterMessage(const std::string& message) const
             LOG_WRN("No value of id in downloadas message");
         }
     }
-    else if (tokens.equals(0, "gettextselection") || tokens.equals(0, ".uno:Copy"))
+    else if (tokens.equals(0, "gettextselection"))
     {
+        // Copying/pasting *within* the document is fine,
+        // so keep .uno:Copy and .uno:Paste, but exporting is not.
         if (_wopiFileInfo && _wopiFileInfo->getDisableCopy())
         {
             allowed = false;
@@ -1394,6 +1399,8 @@ void ClientSession::sendFileMode(const bool readOnly, const bool editComments)
 
 void ClientSession::setLockFailed(const std::string& sReason)
 {
+    // TODO: make this "read-only" a special one with a notification (infobar? balloon tip?)
+    //       and a button to unlock
     _isLockFailed = true;
     setReadOnly(true);
     sendTextFrame("lockfailed:" + sReason);
@@ -1841,33 +1848,48 @@ bool ClientSession::handleKitToClientMessage(const std::shared_ptr<Message>& pay
         docBroker->finalRemoveSession(client_from_this());
         return true;
     }
-    else if (tokens.equals(0, "mediashape:"))
+    else if (tokens.equals(0, "graphicselection:") || tokens.equals(0, "graphicviewselection:"))
     {
-        const std::string json = payload->jsonString();
-        Poco::JSON::Object::Ptr object;
-        if (JsonUtil::parseJSON(json, object))
+        if (payload->find("url", 3) >= 0)
         {
-            const std::string id = JsonUtil::getJSONValue<std::string>(object, "id");
-            if (id.empty())
-            {
-                LOG_ERR("Invalid embeddedmedia json without id: " << json);
-            }
-            else
-            {
-                docBroker->addEmbeddedMedia(id, json);
+            std::string json(payload->data().data(), payload->size());
+            const auto it = json.find('{');
+            const std::string prefix = json.substr(0, it);
+            json.erase(0, it); // Remove the prefix to parse the purse JSON part.
 
-                const std::string mediaUrl =
-                    Util::encodeURIComponent(createPublicURI("media", id, /*encode=*/false), "&");
-                object->set("url", mediaUrl);
-                object->set("mimeType", "video/mp4"); //FIXME: get this from the source json
+            Poco::JSON::Object::Ptr object;
+            if (JsonUtil::parseJSON(json, object))
+            {
+                const std::string url = JsonUtil::getJSONValue<std::string>(object, "url");
+                if (!url.empty())
+                {
+                    const std::string id = JsonUtil::getJSONValue<std::string>(object, "id");
+                    if (!id.empty())
+                    {
+                        docBroker->addEmbeddedMedia(
+                            id, json); // Capture the original message with internal URL.
 
-                std::ostringstream mediaStr;
-                object->stringify(mediaStr);
-                forwardToClient(
-                    std::make_shared<Message>("mediashape: " + mediaStr.str(), Message::Dir::Out));
+                        const std::string mediaUrl = Util::encodeURIComponent(
+                            createPublicURI("media", id, /*encode=*/false), "&");
+                        object->set("url", mediaUrl); // Replace the url with the public one.
+                        object->set("mimeType", "video/mp4"); //FIXME: get this from the source json
+
+                        std::ostringstream mediaStr;
+                        object->stringify(mediaStr);
+                        const std::string msg = prefix + mediaStr.str();
+                        forwardToClient(std::make_shared<Message>(msg, Message::Dir::Out));
+                        return true;
+                    }
+                    else
+                    {
+                        LOG_ERR("Invalid embeddedmedia json without id: " << json);
+                    }
+                }
             }
         }
 
+        // Non-Media graphic selsection.
+        forwardToClient(payload);
         return true;
     }
     else if (tokens.equals(0, "formfieldbutton:")) {

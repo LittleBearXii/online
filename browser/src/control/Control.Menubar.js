@@ -167,6 +167,7 @@ L.Control.Menubar = L.Control.extend({
 				{name: _UNO('.uno:InsertColumnBreak', 'spreadsheet'), uno: '.uno:InsertColumnBreak'},
 				{type: 'separator'},
 				{name: _UNO('.uno:HyperlinkDialog'), id: 'inserthyperlink', type: 'action'},
+				{name: _('Pick Link'), id: 'remotelink', type: 'action'},
 				{type: 'separator'},
 				{uno: '.uno:InsertSymbol'},
 				{name: _UNO('.uno:FormattingMarkMenu', 'text'), type: 'menu', menu: [
@@ -277,11 +278,11 @@ L.Control.Menubar = L.Control.extend({
 				{type: 'separator'},
 				{uno: '.uno:InsertBookmark'},
 				{uno: '.uno:InsertReferenceField'},
-				{type: 'separator', hidden: !window.zoteroEnabled},
+				{id: 'zoteroseparator', type: 'separator', hidden: !window.zoteroEnabled},
 				{name: _('Add Citation'), id: 'zoteroaddeditcitation', type: 'action', hidden: !window.zoteroEnabled},
 				{name: _('Add Citation Note'), id: 'zoteroaddnote', type: 'action', hidden: !window.zoteroEnabled},
 				{name: _('Add Bibliography'), id: 'zoteroaddeditbibliography', type: 'action', hidden: !window.zoteroEnabled},
-				{type: 'separator', hidden: !window.zoteroEnabled},
+				{is: 'zoteroseparator2', type: 'separator', hidden: !window.zoteroEnabled},
 				{name: _('Refresh Citations'), id: 'zoterorefresh', type: 'action', hidden: !window.zoteroEnabled},
 				{name: _('Unlink Citations'), id: 'zoterounlink', type: 'action', hidden: !window.zoteroEnabled},
 				{name: _('Citation Preferences'), id: 'zoterosetdocprefs', type: 'action', iosapp: false, hidden: !window.zoteroEnabled}]
@@ -322,13 +323,16 @@ L.Control.Menubar = L.Control.extend({
 			{name: _UNO('.uno:ToolsMenu', 'text'), id: 'tools', type: 'menu', menu: [
 				{uno: '.uno:SpellingAndGrammarDialog'},
 				{uno: '.uno:SpellOnline'},
-				{uno: '.uno:Translate'},
+				window.deeplEnabled ?
+					{
+						uno: '.uno:Translate'
+					}: {},
 				{uno: '.uno:ThesaurusDialog'},
 				{name: _UNO('.uno:LanguageMenu'), type: 'menu', menu: [
 					{name: _UNO('.uno:SetLanguageSelectionMenu', 'text'), type: 'menu', menu: [
-						{name: _('None (Do not check spelling)'), id: 'noneselection', uno: '.uno:LanguageStatus?Language:string=Current_LANGUAGE_NONE'}, {name: _('More...'), id: 'fontlanguage', uno: '.uno:FontDialog?Page:string=font'}]},
+						{name: _('None (Do not check spelling)'), id: 'noneselection', uno: '.uno:LanguageStatus?Language:string=Current_LANGUAGE_NONE'} ]},
 					{name: _UNO('.uno:SetLanguageParagraphMenu', 'text'), type: 'menu', menu: [
-						{name: _('None (Do not check spelling)'), id: 'noneparagraph', uno: '.uno:LanguageStatus?Language:string=Paragraph_LANGUAGE_NONE'}, {name: _('More...'), id: 'paragraphlanguage', uno: '.uno:FontDialogForParagraph'}]},
+						{name: _('None (Do not check spelling)'), id: 'noneparagraph', uno: '.uno:LanguageStatus?Language:string=Paragraph_LANGUAGE_NONE'} ]},
 					{name: _UNO('.uno:SetLanguageAllTextMenu', 'text'), type: 'menu', menu: [
 						{name: _('None (Do not check spelling)'), id: 'nonelanguage', uno: '.uno:LanguageStatus?Language:string=Default_LANGUAGE_NONE'}]}
 				]},
@@ -427,6 +431,7 @@ L.Control.Menubar = L.Control.extend({
 				{name: _UNO('.uno:VerticalText'), uno: '.uno:VerticalText'},
 				{type: 'separator'},
 				{name: _UNO('.uno:HyperlinkDialog'), id: 'inserthyperlink', type: 'action'},
+				{name: _('Pick Link'), id: 'remotelink', type: 'action'},
 				{type: 'separator'},
 				{uno: '.uno:InsertSymbol'},
 				{type: 'separator'},
@@ -556,6 +561,7 @@ L.Control.Menubar = L.Control.extend({
 				{uno: '.uno:InsertObjectChart'},
 				{type: 'separator'},
 				{name: _UNO('.uno:HyperlinkDialog'), id: 'inserthyperlink', type: 'action'},
+				{name: _('Pick Link'), id: 'remotelink', type: 'action'},
 				{type: 'separator'},
 				{uno: '.uno:InsertSymbol'},
 				{type: 'separator'},
@@ -692,6 +698,7 @@ L.Control.Menubar = L.Control.extend({
 				{uno: '.uno:FunctionDialog'},
 				{type: 'separator'},
 				{name: _UNO('.uno:HyperlinkDialog'), id: 'inserthyperlink', type: 'action'},
+				{name: _('Pick Link'), id: 'remotelink', type: 'action'},
 				{uno: '.uno:InsertSymbol'},
 				{type: 'separator'},
 				{name: _UNO('.uno:InsertField', 'text'), type: 'menu', menu: [
@@ -732,7 +739,10 @@ L.Control.Menubar = L.Control.extend({
 					{type: 'separator'},
 					{uno: '.uno:CommonAlignTop'},
 					{uno: '.uno:CommonAlignVerticalCenter'},
-					{uno: '.uno:CommonAlignBottom'}]},
+					{uno: '.uno:CommonAlignBottom'},
+					{type: 'separator'},
+					{uno: '.uno:ParaLeftToRight'},
+					{uno: '.uno:ParaRightToLeft'}]},
 				{name: _UNO('.uno:NumberFormatMenu', 'spreadsheet'), type: 'menu', menu: [
 					{uno: '.uno:NumberFormatStandard'},
 					{uno: '.uno:NumberFormatDecimal'},
@@ -796,6 +806,7 @@ L.Control.Menubar = L.Control.extend({
 				{uno: '.uno:DeleteCell'},
 				{uno: '.uno:DeleteRows'},
 				{uno: '.uno:DeleteColumns'},
+				{uno: '.uno:SheetRightToLeft'},
 			]},
 			{name: _UNO('.uno:DataMenu', 'spreadsheet'), id: 'data', type: 'menu', menu: [
 				{uno: '.uno:DataSort'},
@@ -911,7 +922,7 @@ L.Control.Menubar = L.Control.extend({
 			]},
 			{name: _UNO('.uno:ViewMenu', 'text'), id: 'view', type: 'menu', menu: [
 				{name: _UNO('.uno:FullScreen', 'text'), id: 'fullscreen', type: 'action', mobileapp: false},
-				{uno: '.uno:ControlCodes'},
+				{uno: '.uno:ControlCodes', id: 'formattingmarks'},
 				{uno: '.uno:SpellOnline'},
 				{name: _UNO('.uno:ShowResolvedAnnotations', 'text'), id: 'showresolved', type: 'action', uno: '.uno:ShowResolvedAnnotations'},
 			]
@@ -1047,6 +1058,8 @@ L.Control.Menubar = L.Control.extend({
 				{name: _('See revision history'), id: 'rev-history', type: 'action'},
 				{type: 'separator'},
 				{name: _UNO('.uno:Print', 'spreadsheet'), id: 'print', type: 'action'},
+				{name: _('Define print area', 'spreadsheet'), uno: '.uno:DefinePrintArea' },
+				{name: _('Remove print area', 'spreadsheet'), uno: '.uno:DeletePrintArea' },
 				{name: _UNO('.uno:SetDocumentProperties', 'spreadsheet'), uno: '.uno:SetDocumentProperties', id: 'properties'}
 			]},
 			{name: !window.ThisIsAMobileApp ? _('Download as') : _('Export as'), id:'downloadas', type: 'menu', menu: [
@@ -1248,7 +1261,7 @@ L.Control.Menubar = L.Control.extend({
 		map.on('doclayerinit', this._onDocLayerInit, this);
 		map.on('updatepermission', this._onRefresh, this);
 		map.on('addmenu', this._addMenu, this);
-		map.on('commandvalues', this._onInitLanguagesMenu, this);
+		map.on('languagesupdated', this._onInitLanguagesMenu, this);
 		map.on('updatetoolbarcommandvalues', this._onStyleMenu, this);
 
 		this._resetOverflow();
@@ -1259,7 +1272,7 @@ L.Control.Menubar = L.Control.extend({
 		this._map.off('doclayerinit', this._onDocLayerInit, this);
 		this._map.off('updatepermission', this._onRefresh, this);
 		this._map.off('addmenu', this._addMenu, this);
-		this._map.off('commandvalues', this._onInitLanguagesMenu, this);
+		this._map.off('languagesupdated', this._onInitLanguagesMenu, this);
 		this._map.off('updatetoolbarcommandvalues', this._onStyleMenu, this);
 
 		this._menubarCont.remove();
@@ -1301,68 +1314,72 @@ L.Control.Menubar = L.Control.extend({
 		return liItem;
 	},
 
+	_createActionMenuItem: function (caption, id) {
+		var liItem, aItem;
+		liItem = L.DomUtil.create('li', '');
+		liItem.setAttribute('role', 'menuitem');
+		aItem = L.DomUtil.create('a', '', liItem);
+		$(aItem).text(caption);
+		$(aItem).data('type', 'action');
+		$(aItem).data('id', id);
+		aItem.tabIndex = 0;
+		return liItem;
+	},
 
-	_onInitLanguagesMenu: function (e) {
-		if (e.commandName === '.uno:LanguageStatus' && L.Util.isArray(e.commandValues)) {
-			var translated, neutral;
-			var constDefa = 'Default_RESET_LANGUAGES';
-			var constCurr = 'Current_RESET_LANGUAGES';
-			var constPara = 'Paragraph_RESET_LANGUAGES';
-			var constLang = '.uno:LanguageStatus?Language:string=';
-			var resetLang = _('Reset to Default Language');
-			var languages  = [];
+	_onInitLanguagesMenu: function () {
+		var translated, neutral;
+		var constDefa = 'Default_RESET_LANGUAGES';
+		var constCurr = 'Current_RESET_LANGUAGES';
+		var constPara = 'Paragraph_RESET_LANGUAGES';
+		var constLang = '.uno:LanguageStatus?Language:string=';
+		var resetLang = _('Reset to Default Language');
+		var languages  = app.languages;
 
-			e.commandValues.forEach(function(language) {
-				var split = language.split(';');
-				language = split[0];
-				var isoCode = '';
-				if (split.length > 1)
-					isoCode = split[1];
-				languages.push({translated: _(language), neutral: language, iso: isoCode});
-			});
-			languages.sort(function(a, b) {
-				return a.translated < b.translated ? -1 : a.translated > b.translated ? 1 : 0;
-			});
+		var $menuSelection = $('#menu-noneselection').parent();
+		var $menuParagraph = $('#menu-noneparagraph').parent();
+		var $menuDefault = $('#menu-nonelanguage').parent();
 
-			var $menuSelection = $('#menu-noneselection').parent();
-			var $menuParagraph = $('#menu-noneparagraph').parent();
-			var $menuDefault = $('#menu-nonelanguage').parent();
+		var noneselection = $('#menu-noneselection').detach();
+		var fontlanguage = $('#menu-fontlanguage').detach();
+		var noneparagraph = $('#menu-noneparagraph').detach();
+		var paragraphlanguage = $('#menu-paragraphlanguage').detach();
+		var nonelanguage = $('#menu-nonelanguage').detach();
 
-			var noneselection = $('#menu-noneselection').detach();
-			var fontlanguage = $('#menu-fontlanguage').detach();
-			var noneparagraph = $('#menu-noneparagraph').detach();
-			var paragraphlanguage = $('#menu-paragraphlanguage').detach();
-			var nonelanguage = $('#menu-nonelanguage').detach();
+		// clear old entries
 
-			// clear old entries
+		$menuSelection.empty();
+		$menuParagraph.empty();
+		$menuDefault.empty();
 
-			$menuSelection.empty();
-			$menuParagraph.empty();
-			$menuDefault.empty();
+		for (var lang in languages) {
+			if (languages.length > 10 && app.favouriteLanguages.indexOf(languages[lang].iso) < 0)
+				continue;
 
-			for (var lang in languages) {
-				translated = languages[lang].translated;
-				neutral = languages[lang].neutral;
+			translated = languages[lang].translated;
+			neutral = languages[lang].neutral;
 
-				$menuSelection.append(this._createUnoMenuItem(translated, constLang + encodeURIComponent('Current_' + neutral)));
-				$menuParagraph.append(this._createUnoMenuItem(translated, constLang + encodeURIComponent('Paragraph_' + neutral)));
-				$menuDefault.append(this._createUnoMenuItem(translated, constLang + encodeURIComponent('Default_' + neutral)));
-			}
-
-			$menuSelection.append(this._createMenu([{type: 'separator'}]));
-			$menuParagraph.append(this._createMenu([{type: 'separator'}]));
-			$menuDefault.append(this._createMenu([{type: 'separator'}]));
-
-			$menuSelection.append(this._createUnoMenuItem(resetLang, constLang + constCurr));
-			$menuParagraph.append(this._createUnoMenuItem(resetLang, constLang + constPara));
-			$menuDefault.append(this._createUnoMenuItem(resetLang, constLang + constDefa));
-
-			$menuSelection.append(noneselection);
-			$menuSelection.append(fontlanguage);
-			$menuParagraph.append(noneparagraph);
-			$menuParagraph.append(paragraphlanguage);
-			$menuDefault.append(nonelanguage);
+			$menuSelection.append(this._createUnoMenuItem(translated, constLang + encodeURIComponent('Current_' + neutral)));
+			$menuParagraph.append(this._createUnoMenuItem(translated, constLang + encodeURIComponent('Paragraph_' + neutral)));
+			$menuDefault.append(this._createUnoMenuItem(translated, constLang + encodeURIComponent('Default_' + neutral)));
 		}
+
+		$menuSelection.append(this._createActionMenuItem(_('More...'), 'morelanguages-selection'));
+		$menuParagraph.append(this._createActionMenuItem(_('More...'), 'morelanguages-paragraph'));
+		$menuDefault.append(this._createActionMenuItem(_('More...'), 'morelanguages-all'));
+
+		$menuSelection.append(this._createMenu([{type: 'separator'}]));
+		$menuParagraph.append(this._createMenu([{type: 'separator'}]));
+		$menuDefault.append(this._createMenu([{type: 'separator'}]));
+
+		$menuSelection.append(this._createUnoMenuItem(resetLang, constLang + constCurr));
+		$menuParagraph.append(this._createUnoMenuItem(resetLang, constLang + constPara));
+		$menuDefault.append(this._createUnoMenuItem(resetLang, constLang + constDefa));
+
+		$menuSelection.append(noneselection);
+		$menuSelection.append(fontlanguage);
+		$menuParagraph.append(noneparagraph);
+		$menuParagraph.append(paragraphlanguage);
+		$menuDefault.append(nonelanguage);
 	},
 
 	_addTabIndexPropsToMainMenu: function () {
@@ -1679,6 +1696,12 @@ L.Control.Menubar = L.Control.extend({
 						$(aItem).removeClass('disabled');
 					}
 				}
+				if (id && id.indexOf('zotero') >= 0) {
+					if (window.zoteroEnabled && self._map.zotero)
+						$(aItem).show();
+					else
+						$(aItem).hide();
+				}
 			} else { // eslint-disable-next-line no-lonely-if
 				if (type === 'unocommand') { // disable all uno commands
 					$(aItem).addClass('disabled');
@@ -1758,14 +1781,15 @@ L.Control.Menubar = L.Control.extend({
 				}
 			}
 		} else if (id === 'shareas' || id === 'ShareAs') {
-			this._map.openShare();
+			this._map.dispatch('shareas');
 		} else if (id === 'print') {
 			this._map.print();
 		} else if (id.startsWith('downloadas-')
 			|| id.startsWith('saveas-')
 			|| id.startsWith('export')
 			|| id.startsWith('zotero')
-			|| id === 'deletepage') {
+			|| id === 'deletepage'
+			|| id === 'remotelink') {
 			this._map.dispatch(id);
 		} else if (id === 'signdocument') {
 			this._map.showSignDocument();
@@ -1818,11 +1842,11 @@ L.Control.Menubar = L.Control.extend({
 		} else if (id === 'forum') {
 			window.open('https://forum.collaboraonline.com', '_blank');
 		} else if (id === 'inserthyperlink') {
-			this._map.showHyperlinkDialog();
+			this._map.dispatch('hyperlinkdialog');
 		} else if (id === 'keyboard-shortcuts' || id === 'online-help') {
 			this._map.showHelp(id);
 		} else if (L.Params.revHistoryEnabled && (id === 'rev-history' || id === 'Rev-History' || id === 'last-mod')) {
-			this._map.openRevisionHistory();
+			this._map.dispatch('rev-history');
 		} else if (id === 'closedocument') {
 			window.onClose();
 		} else if (id === 'repair') {
@@ -1843,6 +1867,8 @@ L.Control.Menubar = L.Control.extend({
 			this._map.sendUnoCommand('.uno:LOKSidebarWriterPage');
 			this._map.fire('showwizardsidebar', {noRefresh: true});
 			window.pageMobileWizard = true;
+		} else if (id.indexOf('morelanguages-') != -1) {
+			this._map.fire('morelanguages', { applyto: id.substr('morelanguages-'.length) });
 		}
 		// Inform the host if asked
 		if (postmessage)
@@ -1956,6 +1982,7 @@ L.Control.Menubar = L.Control.extend({
 			case 'pagesetup':
 			case 'watermark':
 			case 'properties':
+			case 'formattingmarks':
 				return false;
 			case 'insertcomment':
 			case 'savecomments':

@@ -17,6 +17,10 @@
  * 'rawKeyEvents' instead of typing into field, key events are sent only to the server using jsdialog events
  * 'cursor' specifies if user can type into the field or it is readonly
  * 'enabled' editable field can be temporarily disabled
+ *
+ * Copyright the Collabora Online contributors.
+ *
+ * SPDX-License-Identifier: MPL-2.0
  */
 
 /* global JSDialog UNOKey UNOModifier */
@@ -142,6 +146,8 @@ function _multiLineEditControl(parentContainer, data, builder, callback) {
 			} else if (event.key === 'Control') {
 				modifier = modifier | UNOModifier.CTRL;
 				event.preventDefault();
+			} else if (event.key === 'a' && event.ctrlKey) {
+				builder.callback('edit', 'keypress', edit, UNOKey.A | UNOModifier.CTRL, builder);
 			}
 		});
 

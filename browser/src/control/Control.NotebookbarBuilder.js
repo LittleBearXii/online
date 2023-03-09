@@ -3,7 +3,7 @@
  * L.Control.NotebookbarBuilder
  */
 
-/* global app $ _ _UNO */
+/* global $ _ _UNO JSDialog */
 L.Control.NotebookbarBuilder = L.Control.JSDialogBuilder.extend({
 
 	_customizeOptions: function() {
@@ -35,13 +35,11 @@ L.Control.NotebookbarBuilder = L.Control.JSDialogBuilder.extend({
 		this._toolitemHandlers['.uno:Color'] = this._colorControl;
 		this._toolitemHandlers['.uno:FillColor'] = this._colorControl;
 
-		this._toolitemHandlers['.uno:HyperlinkDialog'] = this._insertHyperlinkControl;
 		this._toolitemHandlers['.uno:InsertTable'] = this._insertTableControl;
 		this._toolitemHandlers['.uno:InsertGraphic'] = this._insertGraphicControl;
 		this._toolitemHandlers['.uno:InsertAnnotation'] = this._insertAnnotationControl;
 		this._toolitemHandlers['.uno:LineSpacing'] = this._lineSpacingControl;
 		this._toolitemHandlers['.uno:CharSpacing'] = this._CharSpacing;
-		this._toolitemHandlers['.uno:CharmapControl'] = this._symbolControl;
 		this._toolitemHandlers['.uno:Cut'] = this._clipboardButtonControl;
 		this._toolitemHandlers['.uno:Copy'] = this._clipboardButtonControl;
 		this._toolitemHandlers['.uno:Paste'] = this._clipboardButtonControl;
@@ -49,12 +47,9 @@ L.Control.NotebookbarBuilder = L.Control.JSDialogBuilder.extend({
 		this._toolitemHandlers['.uno:ConditionalFormatMenu'] = this._conditionalFormatControl;
 		this._toolitemHandlers['.uno:SetBorderStyle'] = this._borderStyleControl;
 		this._toolitemHandlers['.uno:SetDefault'] = this._formattingControl;
-		this._toolitemHandlers['.uno:Presentation'] = this._startPresentationControl;
 		this._toolitemHandlers['.uno:Save'] = this._saveControl;
 		this._toolitemHandlers['.uno:SaveAs'] = this._saveAsControl;
-		this._toolitemHandlers['.uno:shareas'] = this._shareAsControl;
 		this._toolitemHandlers['.uno:Print'] = this._printControl;
-		this._toolitemHandlers['.uno:rev-history'] = this._revHistoryControl;
 		this._toolitemHandlers['.uno:InsertPageHeader'] = this._headerFooterControl;
 		this._toolitemHandlers['.uno:InsertPageFooter'] = this._headerFooterControl;
 		this._toolitemHandlers['.uno:Text'] = this._insertTextBoxControl;
@@ -69,7 +64,7 @@ L.Control.NotebookbarBuilder = L.Control.JSDialogBuilder.extend({
 		this._toolitemHandlers['.uno:Feedback'] = this._onlineHelpControl;
 		this._toolitemHandlers['.uno:About'] = this._onlineHelpControl;
 		this._toolitemHandlers['.uno:FullScreen'] = this._onlineHelpControl;
-		this._toolitemHandlers['.uno:LanguageMenu'] = this._languageMenu;
+		this._toolitemHandlers['.uno:LanguageMenu'] = JSDialog.notebookbarLanguageSelector;
 
 		this._toolitemHandlers['.uno:SelectWidth'] = function() {};
 		this._toolitemHandlers['.uno:SetOutline'] = function() {};
@@ -234,9 +229,9 @@ L.Control.NotebookbarBuilder = L.Control.JSDialogBuilder.extend({
 		if (commandName === '.uno:CharFontName') {
 			if (window.ThisIsTheiOSApp) {
 				if (state === '')
-					$('#fontnamecombobox').html(_('Font Name'));
+					$('#fontnamecomboboxios').html(_('Font Name'));
 				else
-					$('#fontnamecombobox').html(state);
+					$('#fontnamecomboboxios').html(state);
 				window.LastSetiOSFontNameButtonFont = state;
 			}
 		} else if (commandName === '.uno:StyleApply') {
@@ -255,12 +250,14 @@ L.Control.NotebookbarBuilder = L.Control.JSDialogBuilder.extend({
 	},
 
 	_createiOsFontButton: function(parentContainer, data, builder) {
-		var table = L.DomUtil.createWithId('div', 'fontnamecombobox', parentContainer);
+		// Fix issue #5838 Use unique IDs for font name combobox elements
+		var table = L.DomUtil.createWithId('div', data.id, parentContainer);
 		var row = L.DomUtil.create('div', 'notebookbar row', table);
-		var button = L.DomUtil.createWithId('button', data.id, row);
+		var button = L.DomUtil.createWithId('button', data.id + 'ios', row);
 
 		$(table).addClass('select2 select2-container select2-container--default');
-		$(row).addClass('select2-selection select2-selection--single');
+		// Fix issue #5838 Don't add the "select2-selection--single" class
+		$(row).addClass('select2-selection');
 		$(button).addClass('select2-selection__rendered');
 
 		if (data.selectedEntries.length && data.entries[data.selectedEntries[0]])
@@ -676,16 +673,6 @@ L.Control.NotebookbarBuilder = L.Control.JSDialogBuilder.extend({
 		return submenuOpts;
 	},
 
-	_insertHyperlinkControl: function(parentContainer, data, builder) {
-		var control = builder._unoToolButton(parentContainer, data, builder);
-
-		$(control.container).unbind('click.toolbutton');
-		$(control.container).click(function () {
-			builder.map.showHyperlinkDialog();
-		});
-		builder._preventDocumentLosingFocusOnClick(control.container);
-	},
-
 	_headerFooterControl: function(parentContainer, data, builder) {
 		var control = builder._unoToolButton(parentContainer, data, builder);
 
@@ -991,26 +978,6 @@ L.Control.NotebookbarBuilder = L.Control.JSDialogBuilder.extend({
 		builder._preventDocumentLosingFocusOnClick(control.container);
 	},
 
-	_symbolControl: function(parentContainer, data, builder) {
-		var control = builder._unoToolButton(parentContainer, data, builder);
-
-		$(control.container).unbind('click.toolbutton');
-		$(control.container).click(function () {
-			builder.map.sendUnoCommand('.uno:InsertSymbol');
-		});
-		builder._preventDocumentLosingFocusOnClick(control.container);
-	},
-
-	_startPresentationControl: function(parentContainer, data, builder) {
-		var control = builder._unoToolButton(parentContainer, data, builder);
-
-		$(control.container).unbind('click.toolbutton');
-		$(control.container).click(function () {
-			builder.map.fire('fullscreen');
-		});
-		builder._preventDocumentLosingFocusOnClick(control.container);
-	},
-
 	_saveControl: function(parentContainer, data, builder) {
 		var control = builder._unoToolButton(parentContainer, data, builder);
 
@@ -1038,16 +1005,6 @@ L.Control.NotebookbarBuilder = L.Control.JSDialogBuilder.extend({
 		builder._preventDocumentLosingFocusOnClick(control.container);
 	},
 
-	_shareAsControl: function(parentContainer, data, builder) {
-		var control = builder._unoToolButton(parentContainer, data, builder);
-
-		$(control.container).unbind('click.toolbutton');
-		$(control.container).click(function () {
-			builder.map.openShare();
-		});
-		builder._preventDocumentLosingFocusOnClick(control.container);
-	},
-
 	_printControl: function(parentContainer, data, builder) {
 		data.text = data.text.replace('...', '');
 		var control = builder._unoToolButton(parentContainer, data, builder);
@@ -1057,93 +1014,6 @@ L.Control.NotebookbarBuilder = L.Control.JSDialogBuilder.extend({
 			builder.map.print();
 		});
 		builder._preventDocumentLosingFocusOnClick(control.container);
-	},
-
-	_revHistoryControl: function(parentContainer, data, builder) {
-		var control = builder._unoToolButton(parentContainer, data, builder);
-
-		$(control.container).unbind('click.toolbutton');
-		$(control.container).click(function () {
-			builder.map.openRevisionHistory();
-		});
-		builder._preventDocumentLosingFocusOnClick(control.container);
-	},
-
-	_languageMenu: function(parentContainer, data, builder) {
-		var menu = [
-			{id: 'nb-LanguageMenu', name: _UNO('.uno:LanguageMenu'), type: 'menu', menu: [
-				{name: _UNO('.uno:SetLanguageSelectionMenu', 'text'), type: 'menu', menu: [
-					{name: _('None (Do not check spelling)'), id: 'noneselection', uno: '.uno:LanguageStatus?Language:string=Current_LANGUAGE_NONE'}]},
-				{name: _UNO('.uno:SetLanguageParagraphMenu', 'text'), type: 'menu', menu: [
-					{name: _('None (Do not check spelling)'), id: 'noneparagraph', uno: '.uno:LanguageStatus?Language:string=Paragraph_LANGUAGE_NONE'}]},
-				{name: _UNO('.uno:SetLanguageAllTextMenu', 'text'), type: 'menu', menu: [
-					{name: _('None (Do not check spelling)'), id: 'nonelanguage', uno: '.uno:LanguageStatus?Language:string=Default_LANGUAGE_NONE'}]},
-			]}
-		];
-
-		if (builder.map.getDocType() !== 'text') {
-			menu = [
-				{id: 'nb-LanguageMenu', name: _UNO('.uno:LanguageMenu'), type: 'menu', menu: [
-					{name: _UNO('.uno:LanguageMenu'), type: 'menu', menu: [
-						{name: _('None (Do not check spelling)'), id: 'nonelanguage', uno: '.uno:LanguageStatus?Language:string=Default_LANGUAGE_NONE'}]}
-				]}
-			];
-		}
-
-		var noLabels = builder.options.noLabelsForUnoButtons;
-		builder.options.noLabelsForUnoButtons = false;
-
-		var options = {hasDropdownArrow: true};
-		var control = builder._unoToolButton(parentContainer, data, builder, options);
-
-		$(control.container).tooltip({disabled: true});
-		$(control.container).unbind('click');
-
-		builder.options.noLabelsForUnoButtons = noLabels;
-
-		$(control.container).unbind('click.toolbutton');
-		$(control.container).tooltip({disabled: true});
-		$(control.container).addClass('sm sm-simple lo-menu');
-
-		var menubar = L.control.menubar({allowedReadonlyMenus: ['nb-hamburger']});
-		menubar._map = builder.map;
-		var menuHtml = menubar._createMenu(menu);
-		document.getElementById(data.id).setAttribute('role', 'menu');
-
-		var oldContent = $(control.container).children().detach();
-		$(control.container).append(menuHtml);
-
-		$(control.container).smartmenus({
-			hideOnClick: true,
-			showOnClick: true,
-			hideTimeout: 0,
-			hideDuration: 0,
-			hideFunction: null,
-			showDuration: 0,
-			showFunction: null,
-			showTimeout: 0,
-			collapsibleHideDuration: 0,
-			collapsibleHideFunction: null,
-			subIndicatorsPos: 'append',
-			subIndicatorsText: '&#8250;'
-		});
-
-		$(menuHtml[0]).children('a').empty();
-		$(menuHtml[0]).children('a').append(oldContent);
-		$(menuHtml[0]).children('a').click(function () {
-			$(control.container).smartmenus('menuHideAll');
-		});
-
-		$(control.container).bind('beforeshow.smapi', {self: menubar}, menubar._beforeShow);
-		$(control.container).bind('click.smapi', {self: menubar}, menubar._onClicked);
-		$(control.container).bind('select.smapi', {self: menubar}, menubar._onItemSelected);
-		$(control.container).bind('keydown', {self: menubar}, menubar._onKeyDown);
-		$(control.container).bind('hideAll.smapi', {self: menubar}, menubar._onMouseOut);
-
-		builder.map.on('commandvalues', menubar._onInitLanguagesMenu, menubar);
-		app.socket.sendMessage('commandvalues command=.uno:LanguageStatus');
-
-		return false;
 	},
 
 	buildControl: function(parent, data) {

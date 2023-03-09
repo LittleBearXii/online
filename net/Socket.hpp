@@ -143,11 +143,12 @@ public:
 
     virtual ~Socket()
     {
-        LOG_TRC("Socket dtor.");
+        LOG_TRC("Socket dtor");
 
         // Doesn't block on sockets; no error handling needed.
 #if !MOBILEAPP
         ::close(_fd);
+        LOG_DBG("Closed socket to [" << clientAddress() << ']');
 #else
         fakeSocketClose(_fd);
 #endif
@@ -411,10 +412,24 @@ class MessageHandlerInterface;
 class ProtocolHandlerInterface :
     public std::enable_shared_from_this<ProtocolHandlerInterface>
 {
+    int _fdSocket; //< The socket file-descriptor.
+
 protected:
     /// We own a message handler, after decoding the socket data we pass it on as messages.
     std::shared_ptr<MessageHandlerInterface> _msgHandler;
+
+    /// Sets the context used by logPrefix.
+    void setLogContext(int fd) { _fdSocket = fd; }
+
+    /// Used by the logging macros to automatically log a context prefix.
+    inline void logPrefix(std::ostream& os) const { os << '#' << _fdSocket << ": "; }
+
 public:
+    ProtocolHandlerInterface()
+        : _fdSocket(-1)
+    {
+    }
+
     // ------------------------------------------------------------------
     // Interface for implementing low level socket goodness from streams.
     // ------------------------------------------------------------------
@@ -742,7 +757,7 @@ public:
     {
         if (newSocket)
         {
-            LOG_DBG("Inserting socket #" << newSocket->getFD() << ", address ["
+            LOG_TRC("Inserting socket #" << newSocket->getFD() << ", address ["
                                          << newSocket->clientAddress() << "], into " << _name);
             // sockets in transit are un-owned.
             newSocket->resetThreadOwner();

@@ -409,6 +409,10 @@ nav.spreadsheet-color-indicator ~ #sidebar-dock-wrapper {
 	z-index: 10;
 }
 
+.cool-annotation > .modalpopup {
+	max-height: initial !important;
+}
+
 .cool-annotation:not(annotation-active) .cool-annotation-collapsed{
 	position: absolute;
 	left: 24px;
@@ -777,7 +781,6 @@ nav.spreadsheet-color-indicator ~ #sidebar-dock-wrapper {
 
 .lokdialog_container.ui-dialog.ui-widget-content {
 	padding: 0px;
-	overflow: visible;
 	width: auto;
 	height: auto;
 	border: none;
@@ -895,6 +898,14 @@ nav.spreadsheet-color-indicator ~ #sidebar-dock-wrapper {
 .hyperlink-popup-btn:hover {
 	background-color: var(--color-background-darker);
 	border-radius: 50%;
+}
+
+#hyperlink-text-box:not(.mobile-wizard) {
+	width: 100% !important;
+	margin-bottom: 10px;
+	resize: none;
+	height: 32px;
+	box-sizing: border-box;
 }
 
 .leaflet-canvas-container .cell-cursor-data {
@@ -1018,4 +1029,13 @@ nav.spreadsheet-color-indicator ~ #sidebar-dock-wrapper {
 	align-items: center;
 	min-height: 100px;
 	min-width: 100px;
+}
+
+#hyperlink-pop-up-preview {
+	text-align: center;
+}
+
+#hyperlink-pop-up-preview img {
+	max-height: 150px;
+	max-width: 250px;
 }

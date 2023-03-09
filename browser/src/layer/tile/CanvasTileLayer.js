@@ -1371,7 +1371,7 @@ L.CanvasTileLayer = L.Layer.extend({
 			// the zoom level has changed
 			app.socket.sendMessage('clientzoom ' + newClientZoom);
 
-			if (!this._map._fatal && this._map._active && app.socket.connected())
+			if (!this._map._fatal && app.idleHandler._active && app.socket.connected())
 				this._clientZoom = newClientZoom;
 		}
 	},
@@ -1537,9 +1537,6 @@ L.CanvasTileLayer = L.Layer.extend({
 		}
 		else if (textMsg.startsWith('graphicselection:')) {
 			this._onGraphicSelectionMsg(textMsg);
-		}
-		else if (textMsg.startsWith('mediashape:')) {
-			this._onMediaShapeMsg(textMsg);
 		}
 		else if (textMsg.startsWith('cellcursor:')) {
 			this._onCellCursorMsg(textMsg);
@@ -2032,7 +2029,7 @@ L.CanvasTileLayer = L.Layer.extend({
 			var wasVisibleSVG = this._graphicMarker._hasVisibleEmbeddedSVG();
 			this._graphicMarker.removeEmbeddedSVG();
 
-			// video is handled in _onMediaShapeMsg
+			// video is handled in _onEmbeddedVideoContent
 			var isVideoSVG = textMsg.indexOf('<video') !== -1;
 			if (isVideoSVG) {
 				this._map._cacheSVG[extraInfo.id] = undefined;
@@ -2044,15 +2041,19 @@ L.CanvasTileLayer = L.Layer.extend({
 		}
 	},
 
-	_onMediaShapeMsg: function (textMsg) {
-		textMsg = textMsg.substring('mediashape:'.length + 1);
-		this._onEmbeddedVideoContent(textMsg);
-	},
-
 	// shows the video inside current selection marker
 	_onEmbeddedVideoContent: function (textMsg) {
 		if (!this._graphicMarker)
 			return;
+
+		// Remove other view selection as it interferes with playing the media.
+		for (var viewId in this._graphicViewMarkers) {
+			if (viewId !== this._viewId && this._map._viewInfo[viewId]) {
+				var viewMarker = this._graphicViewMarkers[viewId].marker;
+				if (viewMarker)
+					this._viewLayerGroup.removeLayer(viewMarker);
+			}
+		}
 
 		var videoDesc = JSON.parse(textMsg);
 
@@ -2226,6 +2227,13 @@ L.CanvasTileLayer = L.Layer.extend({
 		this._onMessage('textselectioncontent:');
 
 		this._onUpdateGraphicSelection();
+
+		if (msgData && msgData.length > 5) {
+			var extraInfo = msgData[5];
+			if (extraInfo.url !== undefined) {
+				this._onEmbeddedVideoContent(JSON.stringify(extraInfo));
+			}
+		}
 	},
 
 	_onGraphicViewSelectionMsg: function (textMsg) {
@@ -2382,8 +2390,9 @@ L.CanvasTileLayer = L.Layer.extend({
 	_onMousePointerMsg: function (textMsg) {
 		textMsg = textMsg.substring(14); // "mousepointer: "
 		textMsg = Cursor.getCustomCursor(textMsg) || textMsg;
-		if (this._map._container.style.cursor !== textMsg) {
-			this._map._container.style.cursor = textMsg;
+		var mapPane = $('.leaflet-pane.leaflet-map-pane');
+		if (mapPane.css('cursor') !== textMsg) {
+			mapPane.css('cursor', textMsg);
 		}
 	},
 
@@ -2394,58 +2403,62 @@ L.CanvasTileLayer = L.Layer.extend({
 	},
 
 	_showURLPopUp: function(position, url) {
-		// # for internal links
-		if (!url.startsWith('#')) {
-			var link = L.DomUtil.createWithId('a', 'hyperlink-pop-up');
-			link.innerText = url;
-			var copyBtn = L.DomUtil.createWithId('div', 'hyperlink-pop-up-copy');
-			L.DomUtil.addClass(copyBtn, 'hyperlink-popup-btn');
-			copyBtn.setAttribute('title', _('Copy link location'));
-			var imgCopyBtn = L.DomUtil.create('img', 'hyperlink-pop-up-copyimg', copyBtn);
-			imgCopyBtn.setAttribute('src', L.LOUtil.getImageURL('lc_copyhyperlinklocation.svg'));
-			imgCopyBtn.setAttribute('width', 18);
-			imgCopyBtn.setAttribute('height', 18);
-			imgCopyBtn.setAttribute('style', 'padding: 4px');
-			var editBtn = L.DomUtil.createWithId('div', 'hyperlink-pop-up-edit');
-			L.DomUtil.addClass(editBtn, 'hyperlink-popup-btn');
-			editBtn.setAttribute('title', _('Edit link'));
-			var imgEditBtn = L.DomUtil.create('img', 'hyperlink-pop-up-editimg', editBtn);
-			imgEditBtn.setAttribute('src', L.LOUtil.getImageURL('lc_edithyperlink.svg'));
-			imgEditBtn.setAttribute('width', 18);
-			imgEditBtn.setAttribute('height', 18);
-			imgEditBtn.setAttribute('style', 'padding: 4px');
-			var removeBtn = L.DomUtil.createWithId('div', 'hyperlink-pop-up-remove');
-			L.DomUtil.addClass(removeBtn, 'hyperlink-popup-btn');
-			removeBtn.setAttribute('title', _('Remove link'));
-			var imgRemoveBtn = L.DomUtil.create('img', 'hyperlink-pop-up-removeimg', removeBtn);
-			imgRemoveBtn.setAttribute('src', L.LOUtil.getImageURL('lc_removehyperlink.svg'));
-			imgRemoveBtn.setAttribute('width', 18);
-			imgRemoveBtn.setAttribute('height', 18);
-			imgRemoveBtn.setAttribute('style', 'padding: 4px');
-			var linkOuterHtml = link.outerHTML + copyBtn.outerHTML + editBtn.outerHTML + removeBtn.outerHTML;
-			this._map.hyperlinkPopup = new L.Popup({className: 'hyperlink-popup', closeButton: false, closeOnClick: false, autoPan: false})
-				.setContent(linkOuterHtml)
-				.setLatLng(position)
-				.openOn(this._map);
-			document.getElementById('hyperlink-pop-up').title = url;
-			var offsetDiffTop = $('.hyperlink-popup').offset().top - $('#map').offset().top;
-			var offsetDiffLeft = $('.hyperlink-popup').offset().left - $('#map').offset().left;
-			if (offsetDiffTop < 10) this._movePopUpBelow();
-			if (offsetDiffLeft < 10) this._movePopUpRight();
-			var map_ = this._map;
-			this._setupClickFuncForId('hyperlink-pop-up', function() {
+		var parent = L.DomUtil.create('div');
+		L.DomUtil.createWithId('div', 'hyperlink-pop-up-preview', parent);
+		var link = L.DomUtil.createWithId('a', 'hyperlink-pop-up', parent);
+		link.innerText = url;
+		var copyBtn = L.DomUtil.createWithId('div', 'hyperlink-pop-up-copy', parent);
+		L.DomUtil.addClass(copyBtn, 'hyperlink-popup-btn');
+		copyBtn.setAttribute('title', _('Copy link location'));
+		var imgCopyBtn = L.DomUtil.create('img', 'hyperlink-pop-up-copyimg', copyBtn);
+		imgCopyBtn.setAttribute('src', L.LOUtil.getImageURL('lc_copyhyperlinklocation.svg'));
+		imgCopyBtn.setAttribute('width', 18);
+		imgCopyBtn.setAttribute('height', 18);
+		imgCopyBtn.setAttribute('style', 'padding: 4px');
+		var editBtn = L.DomUtil.createWithId('div', 'hyperlink-pop-up-edit', parent);
+		L.DomUtil.addClass(editBtn, 'hyperlink-popup-btn');
+		editBtn.setAttribute('title', _('Edit link'));
+		var imgEditBtn = L.DomUtil.create('img', 'hyperlink-pop-up-editimg', editBtn);
+		imgEditBtn.setAttribute('src', L.LOUtil.getImageURL('lc_edithyperlink.svg'));
+		imgEditBtn.setAttribute('width', 18);
+		imgEditBtn.setAttribute('height', 18);
+		imgEditBtn.setAttribute('style', 'padding: 4px');
+		var removeBtn = L.DomUtil.createWithId('div', 'hyperlink-pop-up-remove', parent);
+		L.DomUtil.addClass(removeBtn, 'hyperlink-popup-btn');
+		removeBtn.setAttribute('title', _('Remove link'));
+		var imgRemoveBtn = L.DomUtil.create('img', 'hyperlink-pop-up-removeimg', removeBtn);
+		imgRemoveBtn.setAttribute('src', L.LOUtil.getImageURL('lc_removehyperlink.svg'));
+		imgRemoveBtn.setAttribute('width', 18);
+		imgRemoveBtn.setAttribute('height', 18);
+		imgRemoveBtn.setAttribute('style', 'padding: 4px');
+		this._map.hyperlinkPopup = new L.Popup({className: 'hyperlink-popup', closeButton: false, closeOnClick: false, autoPan: false})
+			.setHTMLContent(parent)
+			.setLatLng(position)
+			.openOn(this._map);
+		document.getElementById('hyperlink-pop-up').title = url;
+		var offsetDiffTop = $('.hyperlink-popup').offset().top - $('#map').offset().top;
+		var offsetDiffLeft = $('.hyperlink-popup').offset().left - $('#map').offset().left;
+		if (offsetDiffTop < 10) this._movePopUpBelow();
+		if (offsetDiffLeft < 10) this._movePopUpRight();
+		var map_ = this._map;
+		this._setupClickFuncForId('hyperlink-pop-up', function() {
+			if (!url.startsWith('#'))
 				map_.fire('warn', {url: url, map: map_, cmd: 'openlink'});
-			});
-			this._setupClickFuncForId('hyperlink-pop-up-copy', function () {
-				map_.sendUnoCommand('.uno:CopyHyperlinkLocation');
-			});
-			this._setupClickFuncForId('hyperlink-pop-up-edit', function () {
-				map_.sendUnoCommand('.uno:EditHyperlink');
-			});
-			this._setupClickFuncForId('hyperlink-pop-up-remove', function () {
-				map_.sendUnoCommand('.uno:RemoveHyperlink');
-			});
-		}
+			else
+				map_.sendUnoCommand('.uno:JumpToMark?Bookmark:string=' + url.substring(1));
+		});
+		this._setupClickFuncForId('hyperlink-pop-up-copy', function () {
+			map_.sendUnoCommand('.uno:CopyHyperlinkLocation');
+		});
+		this._setupClickFuncForId('hyperlink-pop-up-edit', function () {
+			map_.sendUnoCommand('.uno:EditHyperlink');
+		});
+		this._setupClickFuncForId('hyperlink-pop-up-remove', function () {
+			map_.sendUnoCommand('.uno:RemoveHyperlink');
+		});
+
+		if (this._map['wopi'].EnableRemoteLinkPicker)
+			this._map.fire('postMessage', { msgId: 'Action_GetLinkPreview', args: { url: url } });
 	},
 
 	_movePopUpBelow: function() {
@@ -4421,7 +4434,11 @@ L.CanvasTileLayer = L.Layer.extend({
 			var formula = this._lastFormula;
 			var targetURL = formula.substring(11, formula.length - 1).split(',')[0];
 			targetURL = targetURL.split('"').join('');
-			targetURL = this._map.makeURLFromStr(targetURL);
+			if (targetURL.startsWith('#')) {
+				targetURL = targetURL.split(';')[0];
+			} else {
+				targetURL = this._map.makeURLFromStr(targetURL);
+			}
 
 			this._closeURLPopUp();
 			if (targetURL) {
@@ -6175,7 +6192,7 @@ L.CanvasTileLayer = L.Layer.extend({
 		if (this._clientVisibleArea !== newClientVisibleArea || forceUpdate) {
 			// Visible area is dirty, update it on the server
 			app.socket.sendMessage(newClientVisibleArea);
-			if (!this._map._fatal && this._map._active && app.socket.connected())
+			if (!this._map._fatal && app.idleHandler._active && app.socket.connected())
 				this._clientVisibleArea = newClientVisibleArea;
 			if (this._debug) {
 				this._debugInfo.clearLayers();

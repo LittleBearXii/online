@@ -10,6 +10,7 @@ L.Control.UIManager = L.Control.extend({
 	blockedUI: false,
 	busyPopupTimer: null,
 	customButtons: [], // added by WOPI InsertButton
+	modalIdPretext: 'modal-dialog-',
 
 	onAdd: function (map) {
 		this.map = map;
@@ -51,6 +52,9 @@ L.Control.UIManager = L.Control.extend({
 				event.target.parentElement.id === 'document-titlebar') { // checks if clicked on the document titlebar container
 				that.map.fire('editorgotfocus');}
 		});
+
+		if (window.zoteroEnabled)
+			this.map.on('updateviewslist', this.onUpdateViews, this);
 	},
 
 	// UI initialization
@@ -114,10 +118,6 @@ L.Control.UIManager = L.Control.extend({
 		this.map.addControl(L.control.infobar());
 		this.map.userList = L.control.userList();
 		this.map.addControl(this.map.userList);
-		if (window.zoteroEnabled) {
-			this.map.zotero = L.control.zotero(this.map);
-			this.map.addControl(this.map.zotero);
-		}
 
 		var openBusyPopup = function(label) {
 			this.busyPopupTimer = setTimeout(function() {
@@ -137,8 +137,10 @@ L.Control.UIManager = L.Control.extend({
 						}
 					]
 				};
-				if (app.socket)
-					app.socket._onMessage({textMsg: 'jsdialog: ' + JSON.stringify(json)});
+				if (app.socket) {
+					var builderCallback = function() { /* Do nothing. */ };
+					app.socket._onMessage({textMsg: 'jsdialog: ' + JSON.stringify(json), callback: builderCallback});
+				}
 			}, 700);
 		};
 
@@ -692,6 +694,19 @@ L.Control.UIManager = L.Control.extend({
 		this.map.invalidateSize();
 	},
 
+	onUpdateViews: function () {
+		var userPrivateInfo = this.map._docLayer ? this.map._viewInfo[this.map._docLayer._viewId].userprivateinfo : null;
+		if (userPrivateInfo) {
+			var apiKey = userPrivateInfo.ZoteroAPIKey;
+			if (apiKey) {
+				this.map.zotero = L.control.zotero(this.map);
+				this.map.zotero.apiKey = apiKey;
+				this.map.addControl(this.map.zotero);
+				this.map.zotero.updateUserID();
+			}
+		}
+	},
+
 	enterReadonlyOrClose: function() {
 		if (this.map.isEditMode()) {
 			// in edit mode, passing 'edit' actually enters readonly mode
@@ -784,9 +799,14 @@ L.Control.UIManager = L.Control.extend({
 	/// shows modal dialog
 	/// json - JSON for building the dialog
 	/// callbacks - array of { id: widgetId, type: eventType, func: functionToCall }
-	showModal: function(json, callbacks) {
+	showModal: function(json, callbacks, cancelButtonId) {
+		var that = this;
 		var builderCallback = function(objectType, eventType, object, data) {
 			window.app.console.debug('modal action: \'' + objectType + '\' id:\'' + object.id + '\' event: \'' + eventType + '\' state: \'' + data + '\'');
+
+			// default close methods
+			callbacks.push({id: (cancelButtonId ? cancelButtonId: 'response-cancel'), func: function() { that.closeModal(json.id); }});
+			callbacks.push({id: '__POPOVER__', func: function() { that.closeModal(json.id); }});
 
 			for (var i in callbacks) {
 				var callback = callbacks[i];
@@ -799,17 +819,29 @@ L.Control.UIManager = L.Control.extend({
 		app.socket._onMessage({textMsg: 'jsdialog: ' + JSON.stringify(json), callback: builderCallback});
 	},
 
-	_modalDialogJSON: function(id, title, cancellable, widgets) {
-		var dialogId = 'modal-dialog-' + id;
+	closeModal: function(dialogId) {
+		var closeMessage = { id: dialogId, jsontype: 'dialog', type: 'modalpopup', action: 'close' };
+		app.socket._onMessage({ textMsg: 'jsdialog: ' + JSON.stringify(closeMessage) });
+	},
+
+	/// Returns generated (or to be generated) id for the modal container.
+	generateModalId: function(givenId) {
+		return this.modalIdPretext + givenId;
+	},
+
+	_modalDialogJSON: function(id, title, cancellable, widgets, focusId) {
+		var dialogId = this.generateModalId(id);
+		focusId = focusId ? focusId : 'response';
 		return {
 			id: dialogId,
 			dialogid: id,
 			type: 'modalpopup',
 			title: title,
 			hasClose: true,
+			hasOverlay: true,
 			cancellable: cancellable,
 			jsontype: 'dialog',
-			'init_focus_id': 'response',
+			'init_focus_id': focusId,
 			children: [
 				{
 					id: 'info-modal-container',
@@ -830,7 +862,10 @@ L.Control.UIManager = L.Control.extend({
 	/// callback - callback on button press
 	/// withCancel - specifies if needs cancal button also
 	showInfoModal: function(id, title, message1, message2, buttonText, callback, withCancel) {
-		var dialogId = 'modal-dialog-' + id;
+		var dialogId = this.generateModalId(id);
+		var responseButtonId = id + '-response';
+		var cancelButtonId = id + '-cancel';
+
 		var json = this._modalDialogJSON(id, title, true, [
 			{
 				id: 'info-modal-tile-m',
@@ -855,15 +890,16 @@ L.Control.UIManager = L.Control.extend({
 				enabled: true,
 				children: [
 					withCancel ? {
-						id: 'cancel',
+						id: cancelButtonId,
 						type: 'pushbutton',
 						text: _('Cancel')
 					} : { type: 'container' },
 					{
-						id: 'response',
+						id: responseButtonId,
 						type: 'pushbutton',
 						text: buttonText,
 						'has_default': true,
+						hidden: buttonText ? false: true // Hide if no text is given. So we can use one modal type for various purposes.
 					}
 				],
 				vertical: false,
@@ -871,16 +907,14 @@ L.Control.UIManager = L.Control.extend({
 			},
 		]);
 
-		var closeFunc = function() {
-			var closeMessage = { id: dialogId, jsontype: 'dialog', type: 'modalpopup', action: 'close' };
-			app.socket._onMessage({ textMsg: 'jsdialog: ' + JSON.stringify(closeMessage) });
-		};
-
+		var that = this;
 		this.showModal(json, [
-			{id: 'response', func: function() { if (typeof callback === 'function') callback(); closeFunc(); }},
-			{id: 'cancel', func: function() { closeFunc(); }},
-			{id: '__POPOVER__', func: function() { closeFunc(); }}
-		]);
+			{id: responseButtonId, func: function() {
+				if (typeof callback === 'function')
+					callback();
+				that.closeModal(dialogId);
+			}}
+		], cancelButtonId);
 	},
 
 	/// shows simple input modal (message + input + (cancel + ok) button)
@@ -891,7 +925,7 @@ L.Control.UIManager = L.Control.extend({
 	/// buttonText - text inside OK button
 	/// callback - callback on button press
 	showInputModal: function(id, title, message, defaultValue, buttonText, callback) {
-		var dialogId = 'modal-dialog-' + id;
+		var dialogId = this.generateModalId(id);
 		var json = this._modalDialogJSON(id, title, !window.mode.isDesktop(), [
 			{
 				id: 'info-modal-label1',
@@ -926,21 +960,15 @@ L.Control.UIManager = L.Control.extend({
 			},
 		]);
 
-		var closeFunc = function() {
-			var closeMessage = { id: dialogId, jsontype: 'dialog', type: 'modalpopup', action: 'close' };
-			app.socket._onMessage({ textMsg: 'jsdialog: ' + JSON.stringify(closeMessage) });
-		};
-
+		var that = this;
 		this.showModal(json, [
 			{id: 'response-ok', func: function() {
 				if (typeof callback === 'function') {
 					var input = document.getElementById('input-modal-input');
 					callback(input.value);
 				}
-				closeFunc();
-			}},
-			{id: 'response-cancel', func: function() { closeFunc(); }},
-			{id: '__POPOVER__', func: function() { closeFunc(); }}
+				that.closeModal(dialogId);
+			}}
 		]);
 	},
 
@@ -951,7 +979,7 @@ L.Control.UIManager = L.Control.extend({
 	/// buttonText - text inside OK button
 	/// callback - callback on button press
 	showConfirmModal: function(id, title, message, buttonText, callback) {
-		var dialogId = 'modal-dialog-' + id;
+		var dialogId = this.generateModalId(id);
 		var json = this._modalDialogJSON(id, title, !window.mode.isDesktop(), [
 			{
 				id: 'info-modal-label1',
@@ -981,20 +1009,14 @@ L.Control.UIManager = L.Control.extend({
 			},
 		]);
 
-		var closeFunc = function() {
-			var closeMessage = { id: dialogId, jsontype: 'dialog', type: 'modalpopup', action: 'close' };
-			app.socket._onMessage({ textMsg: 'jsdialog: ' + JSON.stringify(closeMessage) });
-		};
-
+		var that = this;
 		this.showModal(json, [
 			{id: 'response-ok', func: function() {
 				if (typeof callback === 'function') {
 					callback();
 				}
-				closeFunc();
-			}},
-			{id: 'response-cancel', func: function() { closeFunc(); }},
-			{id: '__POPOVER__', func: function() { closeFunc(); }}
+				that.closeModal(dialogId);
+			}}
 		]);
 	},
 
