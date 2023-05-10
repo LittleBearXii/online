@@ -70,6 +70,9 @@ public:
     virtual void alertAllUsers(const std::string& cmd, const std::string& kind) = 0;
 
     virtual unsigned getMobileAppDocId() const = 0;
+
+    /// See if we should clear out our memory
+    virtual void trimIfInactive() = 0;
 };
 
 struct RecordedEvent
@@ -262,6 +265,14 @@ public:
         _docManager = nullptr;
     }
 
+    // Only called by kit.
+    void setCanonicalViewId(int viewId) { _canonicalViewId = viewId; }
+
+    int  getCanonicalViewId() { return _canonicalViewId; }
+
+    void setViewRenderState(const std::string& state) { _viewRenderState = state; }
+
+    std::string getViewRenderState() { return _viewRenderState; }
 private:
     bool loadDocument(const StringVector& tokens);
 
@@ -298,10 +309,7 @@ private:
     bool moveSelectedClientParts(const StringVector& tokens);
     bool setPage(const StringVector& tokens);
     bool sendWindowCommand(const StringVector& tokens);
-    bool signDocumentContent(const char* buffer, int length, const StringVector& tokens);
     bool askSignatureStatus(const char* buffer, int length, const StringVector& tokens);
-    bool uploadSignedDocument(const char* buffer, int length, const StringVector& tokens);
-    bool exportSignAndUploadDocument(const char* buffer, int length, const StringVector& tokens);
     bool renderShapeSelection(const StringVector& tokens);
     bool removeTextContext(const StringVector& tokens);
 #if ENABLE_FEATURE_LOCK || ENABLE_FEATURE_RESTRICTION
@@ -379,6 +387,12 @@ private:
 
     /// stores wopi url for export as operation
     std::string _exportAsWopiUrl;
+
+    /// stores info about the view
+    std::string _viewRenderState;
+
+    /// the canonical id unique to the set of rendering properties of this session
+    int _canonicalViewId;
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

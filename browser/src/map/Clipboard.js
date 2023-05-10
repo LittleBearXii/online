@@ -3,7 +3,7 @@
  * L.Clipboard is used to abstract our storage and management of
  * local & remote clipboard data.
  */
-/* global app _ brandProductName isAnyVexDialogActive $ */
+/* global app _ brandProductName $ */
 
 // Get all interesting clipboard related events here, and handle
 // download logic in one place ...
@@ -52,8 +52,7 @@ L.Clipboard = L.Class.extend({
 
 	// We can do a much better job when we fetch text/plain too.
 	stripHTML: function(html) {
-		var tmp = document.createElement('div');
-		tmp.innerHTML = html;
+		var tmp = new DOMParser().parseFromString(html, 'text/html').body;
 		// attempt to cleanup unwanted elements
 		var styles = tmp.querySelectorAll('style');
 		for (var i = 0; i < styles.length; i++) {
@@ -516,9 +515,7 @@ L.Clipboard = L.Class.extend({
 		if ($('.w2ui-input').is(':focus'))
 			return true;
 
-		var isJSDialogOpen = this._map.jsdialog ? this._map.jsdialog.hasDialogOpened(): document.getElementById('mobile-wizard-content').length > 0;
-
-		if ((isAnyVexDialogActive() || isJSDialogOpen) && !this.isPasteSpecialDialogOpen())
+		if (this._map.uiManager.isAnyDialogOpen() && !this.isPasteSpecialDialogOpen())
 			return true;
 
 		if ($('.annotation-active').length && $('.cool-annotation-edit').is(':visible'))
@@ -867,10 +864,12 @@ L.Clipboard = L.Class.extend({
 			msg = L.Util.replaceCtrlAltInMac(msg);
 		}
 
-		this._map.uiManager.showInfoModal('copy_paste_warning');
-		document.getElementById('copy_paste_warning').innerHTML = msg;
-		document.getElementById('copy_paste_warning').tabIndex = 0;
-		document.getElementById('copy_paste_warning').focus(); // We hid the OK button, we need to set focus manually on the popup.
+		var id = 'copy_paste_warning';
+		this._map.uiManager.showYesNoButton(id + '-box', '', '', _('OK'), null, null, null, true);
+		var box = document.getElementById(id + '-box');
+		var innerDiv = L.DomUtil.create('div', '', null);
+		box.insertBefore(innerDiv, box.firstChild);
+		innerDiv.innerHTML = msg;
 	},
 
 	_substProductName: function (msg) {
@@ -905,17 +904,18 @@ L.Clipboard = L.Class.extend({
 	},
 
 	_openPasteSpecialPopup: function () {
-		var msg = _('<p>Your browser has very limited access to the clipboard</p><p>Please press now: <kbd>Ctrl</kbd><span class="kbd--plus">+</span><kbd>V</kbd> to see more options</p><p class="vex-footnote">Close popup to ignore paste special</p>');
+		var msg = _('<p>Your browser has very limited access to the clipboard</p><p>Please press now: <kbd>Ctrl</kbd><span class="kbd--plus">+</span><kbd>V</kbd> to see more options</p><p>Close popup to ignore paste special</p>');
 		msg = L.Util.replaceCtrlAltInMac(msg);
-
-		this._map.uiManager.showInfoModal('paste_special_dialog');
 
 		// We will use this for closing the dialog.
 		this.pasteSpecialDialogId = this._map.uiManager.generateModalId('paste_special_dialog');
 
-		document.getElementById('paste_special_dialog').innerHTML = msg;
-		document.getElementById('paste_special_dialog').tabIndex = 0;
-		document.getElementById('paste_special_dialog').focus(); // We hid the OK button, we need to set focus manually on the popup.
+		var id = 'paste_special_dialog';
+		this._map.uiManager.showYesNoButton(id + '-box', '', '', _('OK'), null, null, null, true);
+		var box = document.getElementById(id + '-box');
+		var innerDiv = L.DomUtil.create('div', '', null);
+		box.insertBefore(innerDiv, box.firstChild);
+		innerDiv.innerHTML = msg;
 	},
 });
 

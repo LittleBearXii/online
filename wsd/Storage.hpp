@@ -62,6 +62,12 @@ struct LockContext
     /// one-time setup for supporting locks & create token
     void initSupportsLocks();
 
+    /// wait another refresh cycle
+    void bumpTimer()
+    {
+        _lastLockTime = std::chrono::steady_clock::now();
+    }
+
     /// do we need to refresh our lock ?
     bool needsRefresh(const std::chrono::steady_clock::time_point &now) const;
 
@@ -173,7 +179,7 @@ public:
         const std::string& getExtendedData() const { return _extendedData; }
 
         /// Dump the internals of this instance.
-        void dumpState(std::ostream& os, const std::string& indent = "\n  ")
+        void dumpState(std::ostream& os, const std::string& indent = "\n  ") const
         {
             os << indent << "forced: " << std::boolalpha << isForced();
             os << indent << "user-modified: " << std::boolalpha << isUserModified();

@@ -55,7 +55,6 @@ L.Control.NotebookbarBuilder = L.Control.JSDialogBuilder.extend({
 		this._toolitemHandlers['.uno:Text'] = this._insertTextBoxControl;
 		this._toolitemHandlers['.uno:DrawText'] = this._insertTextBoxControl;
 		this._toolitemHandlers['.uno:VerticalText'] = this._insertTextBoxControl;
-		this._toolitemHandlers['.uno:ShowResolvedAnnotations'] = this._showResolvedAnnotationsControl;
 		this._toolitemHandlers['.uno:OnlineHelp'] = this._onlineHelpControl;
 		this._toolitemHandlers['.uno:ForumHelp'] = this._onlineHelpControl;
 		this._toolitemHandlers['.uno:KeyboardShortcuts'] = this._onlineHelpControl;
@@ -71,7 +70,6 @@ L.Control.NotebookbarBuilder = L.Control.JSDialogBuilder.extend({
 		this._toolitemHandlers['.uno:DesignerDialog'] = function() {};
 		this._toolitemHandlers['.uno:Zoom'] = function() {};
 		this._toolitemHandlers['.uno:PrintPreview'] = function() {};
-		this._toolitemHandlers['.uno:Navigator'] = function() {};
 		this._toolitemHandlers['.uno:InsertObject'] = function() {};
 		this._toolitemHandlers['.uno:Gallery'] = function() {};
 		this._toolitemHandlers['.uno:InsertAVMedia'] = function() {};
@@ -359,9 +357,13 @@ L.Control.NotebookbarBuilder = L.Control.JSDialogBuilder.extend({
 			}
 
 			$(tabs[t]).addClass('selected');
+			tabs[t].setAttribute('aria-selected', 'true');
+			tabs[t].removeAttribute('tabindex');
 			for (var i = 0; i < tabs.length; i++) {
 				if (i !== t) {
 					$(tabs[i]).removeClass('selected');
+					tabs[i].setAttribute('aria-selected', 'false');
+					tabs[i].tabIndex = -1;
 					$(tabs[i]).prop('title', '');
 					$(contentDivs[i]).hide();
 				}
@@ -370,9 +372,13 @@ L.Control.NotebookbarBuilder = L.Control.JSDialogBuilder.extend({
 			$(window).resize();
 			builder.wizard.selectedTab(tabIds[t]);
 
-			// don't lose focus on tab change
-			event.preventDefault();
-			builder.map.focus();
+			// Keep focus if user is navigating via keyboard.
+			if (!tabs[t].enterPressed) {
+				// don't lose focus on tab change
+				event.preventDefault();
+				builder.map.focus();
+				t.enterPressed = false;
+			}
 		};
 	},
 
@@ -389,6 +395,57 @@ L.Control.NotebookbarBuilder = L.Control.JSDialogBuilder.extend({
 		}
 
 		return true;
+	},
+
+	_makeW2MenuFocusable: function(builder, id, menu, parentId, itemCallback) {
+		var element = document.getElementById(id);
+		var rows = element.getElementsByTagName('tr');
+		rows = Array.from(rows);
+
+		if (rows.length > 0) {
+			var tabStartIndex = 1000; // Shouldn't be 0 (zero).
+			// Loop focus inside menu - start.
+			var parentNode = rows[0].parentNode;
+			var trBegin = document.createElement('tr');
+			trBegin.tabIndex = tabStartIndex - 1;
+			trBegin.id = id + '-beginning';
+			parentNode.insertBefore(trBegin, parentNode.children[0]);
+
+			var trEnd = document.createElement('tr');
+			trEnd.id = id + '-ending';
+			trEnd.tabIndex = tabStartIndex + rows.length;
+			parentNode.appendChild(trEnd);
+
+			trBegin.addEventListener('focusin', function() {
+				rows[rows.length - 1].focus();
+			});
+
+			trEnd.addEventListener('focusin', function() {
+				rows[0].focus();
+			});
+			// Loop focus inside menu - end.
+
+			rows.forEach(function(row, index) {
+				if (!menu[index].type || (menu[index].type !== 'break' && menu[index].type !== 'separator'))
+					row.tabIndex = index + tabStartIndex;
+
+				row.onkeydown = function(e) {
+					var elementToHide = document.getElementById(id);
+					if (e.code === 'Enter' || e.code === 'Space') {
+						itemCallback({ item: menu[index] });
+						if (elementToHide)
+							elementToHide.style.display = 'none';
+					}
+					else if (e.code === 'Escape') {
+						if (elementToHide)
+							elementToHide.style.display = 'none';
+						document.getElementById(parentId).focus();
+					}
+				};
+			});
+
+			trEnd.focus();
+		}
 	},
 
 	_menubarToolItemHandler: function(parentContainer, data, builder) {
@@ -422,12 +479,17 @@ L.Control.NotebookbarBuilder = L.Control.JSDialogBuilder.extend({
 					return;
 				}
 
+				var itemCallback = function(event) {
+					builder.map.dispatch(event.item.id);
+				};
+
 				$(control.container).w2menu({
+					name: 'download-as-menu',
 					items: submenuOpts,
-					onSelect: function (event) {
-						builder.map.dispatch(event.item.id);
-					}
+					onSelect: itemCallback
 				});
+
+				builder._makeW2MenuFocusable(builder, 'w2ui-overlay-download-as-menu', submenuOpts, data.id, itemCallback);
 			});
 		}
 
@@ -501,14 +563,14 @@ L.Control.NotebookbarBuilder = L.Control.JSDialogBuilder.extend({
 					'text': _('Word 2003 Document (.doc)')
 				},
 				{
-					'id': 'exportepub',
+					'id': !window.ThisIsAMobileApp ? 'exportepub' : 'downloadas-epub',
 					'text': _('EPUB (.epub)'),
-					'command': 'exportepub'
+					'command': !window.ThisIsAMobileApp ? 'exportepub' : 'downloadas-epub'
 				},
 				{
-					'id': 'exportpdf',
+					'id': !window.ThisIsAMobileApp ? 'exportpdf' : 'downloadas-pdf',
 					'text': _('PDF Document (.pdf)'),
-					'command': 'exportpdf'
+					'command': !window.ThisIsAMobileApp ? 'exportpdf' : 'downloadas-pdf'
 				}
 			];
 		} else if (docType === 'spreadsheet') {
@@ -530,9 +592,9 @@ L.Control.NotebookbarBuilder = L.Control.JSDialogBuilder.extend({
 					'text': _('CSV File (.csv)')
 				},
 				{
-					'id': 'exportpdf',
+					'id': !window.ThisIsAMobileApp ? 'exportpdf' : 'downloadas-pdf',
 					'text': _('PDF Document (.pdf)'),
-					'command': 'exportpdf',
+					'command': !window.ThisIsAMobileApp ? 'exportpdf' : 'downloadas-pdf'
 				}
 			];
 		} else if (docType === 'presentation') {
@@ -554,9 +616,9 @@ L.Control.NotebookbarBuilder = L.Control.JSDialogBuilder.extend({
 					'text': _('PowerPoint 2003 Presentation (.ppt)')
 				},
 				{
-					'id': 'exportpdf',
+					'id': !window.ThisIsAMobileApp ? 'exportpdf' : 'downloadas-pdf',
 					'text': _('PDF Document (.pdf)'),
-					'command': 'exportpdf',
+					'command': !window.ThisIsAMobileApp ? 'exportpdf' : 'downloadas-pdf'
 				}
 			];
 		}
@@ -697,19 +759,6 @@ L.Control.NotebookbarBuilder = L.Control.JSDialogBuilder.extend({
 		builder._preventDocumentLosingFocusOnClick(control.container);
 	},
 
-	_showResolvedAnnotationsControl: function(parentContainer, data, builder) {
-		var control = builder._unoToolButton(parentContainer, data, builder);
-
-		$(control.container).unbind('click.toolbutton');
-		$(control.container).click(function () {
-			var items = builder.map['stateChangeHandler'];
-			var val = items.getItemValue('.uno:ShowResolvedAnnotations');
-			val = (val === 'true' || val === true);
-			builder.map.showResolvedComments(!val);
-		});
-		builder._preventDocumentLosingFocusOnClick(control.container);
-	},
-
 	_onlineHelpControl: function(parentContainer, data, builder) {
 		var originalDataId = data.id; // builder can change this
 		var control = builder._unoToolButton(parentContainer, data, builder);
@@ -790,34 +839,38 @@ L.Control.NotebookbarBuilder = L.Control.JSDialogBuilder.extend({
 		$(control.container).unbind('click.toolbutton');
 		$(control.container).click(function () {
 			if (!$('#conditionalformatmenu-grid').length) {
+				var itemCallback = function(event) {
+					if (event.item.html && !$('#w2ui-overlay-conditionalformatmenu-sub').length) {
+						$(event.originalEvent.target).w2overlay({
+							name: 'conditionalformatmenu-sub',
+							html: event.item.html,
+							left: 100,
+							top: -20,
+							noTip: true,
+							onHide: function() {
+								closeAll(this.name);
+							}
+						});
+						if ($('#iconsetoverlay').length) {
+							$('#iconsetoverlay').click(function() {
+								builder.map.sendUnoCommand('.uno:IconSetFormatDialog');
+								closeAll();
+							});
+						}
+					} else if (!event.item.html) {
+						builder.map.sendUnoCommand('.uno:' + event.item.uno);
+						closeAll();
+					}
+				};
+
 				$(control.container).w2menu({
 					name: 'conditionalformatmenu',
 					items: menu,
 					keepOpen: true,
-					onSelect: function (event) {
-						if (event.item.html && !$('#w2ui-overlay-conditionalformatmenu-sub').length) {
-							$(event.originalEvent.target).w2overlay({
-								name: 'conditionalformatmenu-sub',
-								html: event.item.html,
-								left: 100,
-								top: -20,
-								noTip: true,
-								onHide: function() {
-									closeAll(this.name);
-								}
-							});
-							if ($('#iconsetoverlay').length) {
-								$('#iconsetoverlay').click(function() {
-									builder.map.sendUnoCommand('.uno:IconSetFormatDialog');
-									closeAll();
-								});
-							}
-						} else if (!event.item.html) {
-							builder.map.sendUnoCommand('.uno:' + event.item.uno);
-							closeAll();
-						}
-					}
+					onSelect: itemCallback
 				});
+
+				builder._makeW2MenuFocusable(builder, 'w2ui-overlay-conditionalformatmenu', menu, data.id, itemCallback);
 			}
 		});
 		builder._preventDocumentLosingFocusOnClick(control.container);
@@ -847,19 +900,25 @@ L.Control.NotebookbarBuilder = L.Control.JSDialogBuilder.extend({
 		$(control.container).unbind('click.toolbutton');
 		$(control.container).click(function () {
 			if (builder.map['wopi'].EnableInsertRemoteImage) {
-				$(control.container).w2menu({
-					items: [
-						{id: 'localgraphic', text: _('Insert Local Image')},
-						{id: 'remotegraphic', text: _UNO('.uno:InsertGraphic', '', true)}
-					],
-					onSelect: function (event) {
-						if (event.item.id === 'localgraphic') {
-							L.DomUtil.get('insertgraphic').click();
-						} else if (event.item.id === 'remotegraphic') {
-							builder.map.fire('postMessage', {msgId: 'UI_InsertGraphic'});
-						}
+				var menu = [
+					{id: 'localgraphic', text: _('Insert Local Image')},
+					{id: 'remotegraphic', text: _UNO('.uno:InsertGraphic', '', true)}
+				];
+
+				var itemCallback = function(event) {
+					if (event.item.id === 'localgraphic') {
+						L.DomUtil.get('insertgraphic').click();
+					} else if (event.item.id === 'remotegraphic') {
+						builder.map.fire('postMessage', {msgId: 'UI_InsertGraphic'});
 					}
+				};
+
+				$(control.container).w2menu({
+					name: 'insert-graphic-menu',
+					items: menu,
+					onSelect: itemCallback
 				});
+				builder._makeW2MenuFocusable(builder, 'w2ui-overlay-insert-graphic-menu', menu, data.id, itemCallback);
 			} else {
 				L.DomUtil.get('insertgraphic').click();
 			}
@@ -891,16 +950,19 @@ L.Control.NotebookbarBuilder = L.Control.JSDialogBuilder.extend({
 					{text: _UNO('.uno:PasteSpecial', 'text'), uno: 'PasteSpecial', hint: L.Control.MenubarShortcuts.shortcuts.PASTE_SPECIAL},
 				];
 
+				var itemCallback = function(event) {
+					if (event.item)
+						builder.map._clip.filterExecCopyPaste('.uno:' + event.item.uno);
+				};
+
 				$(control.container).unbind('click.toolbutton');
 				$(control.container).click(function () {
 					$(control.container).w2menu({
 						name: 'pastemenu',
 						items: menu,
-						onSelect: function (event) {
-							if (event.item)
-								builder.map._clip.filterExecCopyPaste('.uno:' + event.item.uno);
-						}
+						onSelect: itemCallback
 					});
+					builder._makeW2MenuFocusable(builder, 'w2ui-overlay-pastemenu', menu, data.id, itemCallback);
 				});
 			} else {
 				$(control.container).unbind('click.toolbutton');
@@ -929,19 +991,25 @@ L.Control.NotebookbarBuilder = L.Control.JSDialogBuilder.extend({
 					return false;
 			};
 
+			var menu = [
+				{id: 'space1', text: _('Very Tight'), uno: 'Spacing?Spacing:short=-60', checked: isChecked(-60)},
+				{id: 'space1', text: _('Tight'), uno: 'Spacing?Spacing:short=-30', checked: isChecked(-30)},
+				{id: 'space15', text: _('Normal'), uno: 'Spacing?Spacing:short=0', checked: isChecked(0)},
+				{id: 'space2', text: _('Loose'), uno: 'Spacing?Spacing:short=60', checked: isChecked(60)},
+				{id: 'space2', text: _('Very Loose'), uno: 'Spacing?Spacing:short=120', checked: isChecked(120)},
+			];
+
+			var itemCallback = function(event) {
+				builder.map.sendUnoCommand('.uno:' + event.item.uno);
+			};
+
 			$(control.container).w2menu({
-				items: [
-					{id: 'space1', text: _('Very Tight'), uno: 'Spacing?Spacing:short=-60', checked: isChecked(-60)},
-					{id: 'space1', text: _('Tight'), uno: 'Spacing?Spacing:short=-30', checked: isChecked(-30)},
-					{id: 'space15', text: _('Normal'), uno: 'Spacing?Spacing:short=0', checked: isChecked(0)},
-					{id: 'space2', text: _('Loose'), uno: 'Spacing?Spacing:short=60', checked: isChecked(60)},
-					{id: 'space2', text: _('Very Loose'), uno: 'Spacing?Spacing:short=120', checked: isChecked(120)},
-				],
+				name: 'char-space-menu',
+				items: menu,
 				type: 'menu',
-				onSelect: function (event) {
-					builder.map.sendUnoCommand('.uno:' + event.item.uno);
-				}
+				onSelect: itemCallback
 			});
+			builder._makeW2MenuFocusable(builder, 'w2ui-overlay-char-space-menu', menu, data.id, itemCallback);
 		});
 	},
 
@@ -960,20 +1028,26 @@ L.Control.NotebookbarBuilder = L.Control.JSDialogBuilder.extend({
 					return false;
 			};
 
+			var menu = [
+				{id: 'spacepara1', img: 'spacepara1', text: _UNO('.uno:SpacePara1'), uno: 'SpacePara1', checked: isChecked('.uno:SpacePara1')},
+				{id: 'spacepara15', img: 'spacepara15', text: _UNO('.uno:SpacePara15'), uno: 'SpacePara15', checked: isChecked('.uno:SpacePara15')},
+				{id: 'spacepara2', img: 'spacepara2', text: _UNO('.uno:SpacePara2'), uno: 'SpacePara2', checked: isChecked('.uno:SpacePara2')},
+				{type: 'break'},
+				{id: 'paraspaceincrease', img: 'paraspaceincrease', text: _UNO('.uno:ParaspaceIncrease'), uno: 'ParaspaceIncrease'},
+				{id: 'paraspacedecrease', img: 'paraspacedecrease', text: _UNO('.uno:ParaspaceDecrease'), uno: 'ParaspaceDecrease'}
+			];
+
+			var itemCallback = function(event) {
+				builder.map.sendUnoCommand('.uno:' + event.item.uno);
+			};
+
 			$(control.container).w2menu({
-				items: [
-					{id: 'spacepara1', img: 'spacepara1', text: _UNO('.uno:SpacePara1'), uno: 'SpacePara1', checked: isChecked('.uno:SpacePara1')},
-					{id: 'spacepara15', img: 'spacepara15', text: _UNO('.uno:SpacePara15'), uno: 'SpacePara15', checked: isChecked('.uno:SpacePara15')},
-					{id: 'spacepara2', img: 'spacepara2', text: _UNO('.uno:SpacePara2'), uno: 'SpacePara2', checked: isChecked('.uno:SpacePara2')},
-					{type: 'break'},
-					{id: 'paraspaceincrease', img: 'paraspaceincrease', text: _UNO('.uno:ParaspaceIncrease'), uno: 'ParaspaceIncrease'},
-					{id: 'paraspacedecrease', img: 'paraspacedecrease', text: _UNO('.uno:ParaspaceDecrease'), uno: 'ParaspaceDecrease'}
-				],
+				items: menu,
+				name: 'line-spacing-menu',
 				type: 'menu',
-				onSelect: function (event) {
-					builder.map.sendUnoCommand('.uno:' + event.item.uno);
-				}
+				onSelect: itemCallback
 			});
+			builder._makeW2MenuFocusable(builder, 'w2ui-overlay-line-spacing-menu', menu, data.id, itemCallback);
 		});
 		builder._preventDocumentLosingFocusOnClick(control.container);
 	},
@@ -1080,6 +1154,7 @@ L.Control.NotebookbarBuilder = L.Control.JSDialogBuilder.extend({
 				$(table).addClass(this.options.cssClass);
 				$(table).addClass('vertical');
 				var childObject = L.DomUtil.create('div', 'row ' + this.options.cssClass, table);
+				childObject.id = tableId ? tableId + '-row' : '';
 			} else {
 				childObject = td;
 			}

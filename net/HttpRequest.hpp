@@ -846,7 +846,7 @@ public:
         _bodyFile.open(path, std::ios_base::out | std::ios_base::binary);
         _onBodyWriteCb = [this](const char* p, int64_t len)
         {
-            LOG_TRC("Writing " << len << " bytes.");
+            LOG_TRC("Writing " << len << " bytes");
             if (_bodyFile.good())
                 _bodyFile.write(p, len);
             return _bodyFile.good() ? len : -1;
@@ -1324,6 +1324,7 @@ private:
         if (socket)
         {
             _fd = socket->getFD();
+            _response->setLogContext(_fd);
             LOG_TRC("Connected");
             _connected = true;
         }
@@ -1373,12 +1374,19 @@ private:
         }
 
         assert(socket && "No valid socket to handleIncomingMessage.");
-        LOG_TRC("handleIncomingMessage");
 
-        bool close = false;
         Buffer& data = socket->getInBuffer();
+        if (data.empty())
+        {
+            LOG_DBG("No data to process from the socket");
+            return;
+        }
+
+        LOG_TRC("HandleIncomingMessage: buffer has:\n"
+                << Util::dumpHex(std::string(data.data(), std::min(data.size(), 256UL))));
 
         // Consume the incoming data by parsing and processing the body.
+        bool close = false;
         const int64_t read = _response->readData(data.data(), data.size());
         if (read > 0)
         {

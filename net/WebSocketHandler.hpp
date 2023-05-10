@@ -178,6 +178,8 @@ protected:
     /// Implementation of the ProtocolHandlerInterface.
     void onConnect(const std::shared_ptr<StreamSocket>& socket) override
     {
+        LOG_ASSERT_MSG(socket, "Invalid socket passed to WebSocketHandler::onConnect");
+
         _socket = socket;
         setLogContext(socket->getFD());
         LOG_TRC("Connected to WS Handler " << this);
@@ -902,7 +904,7 @@ protected:
     }
 
     /// Implementation of the ProtocolHandlerInterface.
-    void dumpState(std::ostream& os) override;
+    void dumpState(std::ostream& os) const override;
 
     /// To make the protected 'computeAccept' accessible.
     class PublicComputeAccept final : public Poco::Net::WebSocket

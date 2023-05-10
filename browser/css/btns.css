@@ -1,16 +1,9 @@
 /* For btns hover status see device-desktop.css */
 
-.jsdialog-container .ui-button-box button,
-.vex.vex-theme-plain .vex-dialog-button {
-	font-family: var(--jquery-ui-font);
-	text-transform: full-size-kana;
-}
-
 .jsdialog *[disabled] {
 	color: var(--color-text-lighter);
-	border: 1px solid var(--color-btn-border-dis);
-	filter: grayscale(1);
-	opacity: 0.7;
+	border: 1px solid var(--color-border-lighter);
+	background: var(--color-background-lighter);
 }
 
 /*limit icon to button height*/
@@ -18,8 +11,7 @@ button.jsdialog img {
 	max-height: 100%;
 }
 
-.annotation-btns-container,
-.vex-dialog-buttons {
+.annotation-btns-container {
 	display: flex;
 	flex-direction: row;
 	justify-content: end;
@@ -27,7 +19,7 @@ button.jsdialog img {
 }
 
 .button-secondary,
-button:not(.ui-corner-all):not(.button-primary) {
+button:not(.ui-tab):not(.ui-corner-all):not(.button-primary):not(.unobutton) {
 	box-sizing: border-box;
 	height: 32px;
 	line-height: 0em;
@@ -54,10 +46,6 @@ button:not(.ui-corner-all):not(.button-primary) {
 	vertical-align: middle;
 }
 
-.vex.vex-theme-plain .vex-dialog-form .vex-dialog-buttons {
-	margin-right: -5px; /* Account for child element (button)'s margin */
-}
-
 .jsdialog.ui-button-box.end {
 	margin-top: 8px;
 	display: flex;
@@ -76,12 +64,13 @@ button:not(.ui-corner-all):not(.button-primary) {
 
 .ui-pushbutton[disabled] {
 	color: var(--color-text-lighter) !important;
-	background-color: white !important;
+	background-color: var(--color-background-lighter) !important;
+	border: 1px solid var(--color-border-lighter) !important;
 }
 
 .ui-pushbutton[disabled]:hover {
 	cursor: not-allowed !important;
-	background: white !important;
+	background: var(--color-background-darker) !important;
 }
 
 /* button box */

@@ -4,6 +4,9 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
+
+#pragma once
+
 #include "config.h"
 
 #include "Protocol.hpp"
@@ -465,7 +468,13 @@ protected:
                 oss << '\t' << pair.first << ": " << pair.second << " / ";
             }
 
+            if (UnitBase::get().isFinished())
+                oss << "\nIgnoring as test has finished";
+
             LOG_TST(oss.str());
+
+            if (UnitBase::get().isFinished())
+                return false;
         }
 
         assertTargetTest(uriReq);

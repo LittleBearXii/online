@@ -8,7 +8,7 @@
  * text area itself.
  */
 
-/* global app isAnyVexDialogActive */
+/* global app */
 
 L.TextInput = L.Layer.extend({
 	initialize: function() {
@@ -211,10 +211,6 @@ L.TextInput = L.Layer.extend({
 	// @acceptInput (only on "mobile" (= mobile phone) or on iOS and Android in general) true if we want to
 	// accept key input, and show the virtual keyboard.
 	focus: function(acceptInput) {
-		if (isAnyVexDialogActive())
-			return;
-		// window.app.console.trace('L.TextInput.focus(' + acceptInput + ')');
-
 		// Note that the acceptInput parameter intentionally
 		// is a tri-state boolean: undefined, false, or true.
 
@@ -728,7 +724,7 @@ L.TextInput = L.Layer.extend({
 			if (removeBefore === 0) {
 				docLayer._mentionText.push(ev.data);
 				var regEx = /^[0-9a-zA-Z ]+$/;
-				if (ev.data.match(regEx))
+				if (ev.data && ev.data.match(regEx))
 					this._map.fire('sendmentiontext', {data: docLayer._mentionText});
 				else {
 					this._map.fire('closementionpopup', { 'typingMention': false });
@@ -877,12 +873,42 @@ L.TextInput = L.Layer.extend({
 			this._linebreakHint = ev.keyCode === 13 && ev.shiftKey;
 		}
 
+		// We want to open drowdown menu when cursor is above a dropdown content control.
+		if (ev.code === 'Space' || ev.code === 'Enter') {
+			if (this._map['stateChangeHandler'].getItemValue('.uno:ContentControlProperties') === 'enabled') {
+				if (app.sectionContainer.doesSectionExist(L.CSections.ContentControl.name)) {
+					var section = app.sectionContainer.getSectionWithName(L.CSections.ContentControl.name);
+					section.onClickDropdown(ev);
+				}
+			}
+		}
+
+		if (ev.altKey && ev.code === 'KeyC') {
+			// We want to focus on the comment menu if a comment is currently shown in Writer or Calc.
+			// This is the key combination (Alt+C or Alt+Shift+C) for focusing on the comment menu.
+
+			// On Calc, first press opens the comment, second press focuses on it.
+			var section = app.sectionContainer.getSectionWithName(L.CSections.CommentList.name);
+			if (section) {
+				if (section.sectionProperties.selectedComment) {
+					var id = section.sectionProperties.selectedComment.sectionProperties.menu.id;
+					var element = document.getElementById(id);
+					if (element)
+						element.focus();
+				}
+				else if (this._map._docLayer._docType === 'spreadsheet') {
+					if (section.sectionProperties.calcCurrentComment !== null)
+						section.sectionProperties.calcCurrentComment.show();
+				}
+			}
+		}
+
 		var mentionPopup = L.DomUtil.get('mentionPopup');
 		if (mentionPopup) {
 			if (ev.key === 'ArrowDown') {
-				var initialFocusElement =
-					document.querySelector('#mentionPopup span[tabIndex="0"]');
+				var initialFocusElement = document.querySelector('#mentionPopup span');
 				if (initialFocusElement) {
+					initialFocusElement.tabIndex = 0;
 					initialFocusElement.focus();
 					ev.preventDefault();
 					ev.stopPropagation();
@@ -904,6 +930,9 @@ L.TextInput = L.Layer.extend({
 	// Across browsers, arrow up/down / home / end would move the caret to
 	// the beginning/end of the textarea/contenteditable.
 	_onKeyUp: function(ev) {
+		// We also add this handler here because keyup event is not fired for page when map is active.
+		document.body.classList.remove('activate-underlines');
+
 		if (this._map.uiManager.isUIBlocked())
 			return;
 
@@ -911,7 +940,7 @@ L.TextInput = L.Layer.extend({
 		if (!this._isComposing && (ev.key === 'ArrowLeft' || ev.key === 'ArrowRight' ||
 			ev.key === 'ArrowUp' || ev.key === 'ArrowDown' ||
 			ev.key === 'Home' || ev.key === 'End' ||
-			ev.key === 'PageUp' || ev.key === 'PageDown' || 
+			ev.key === 'PageUp' || ev.key === 'PageDown' ||
 			ev.key === 'Escape'))
 			this._emptyArea();
 	},

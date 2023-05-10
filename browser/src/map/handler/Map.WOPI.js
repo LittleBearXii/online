@@ -128,6 +128,7 @@ L.Map.WOPI = L.Handler.extend({
 			app.file.permission = (app.file.permission === 'edit' ? 'edit': app.file.permission);
 		else
 			app.file.permission = 'readonly';
+		this.IsOwner = !!wopiInfo['IsOwner'];
 
 		if (wopiInfo['HideUserList'])
 			this.HideUserList = wopiInfo['HideUserList'].split(',');
@@ -319,6 +320,8 @@ L.Map.WOPI = L.Handler.extend({
 		else if (msg.MessageId === 'Insert_Button' &&
 			msg.Values && msg.Values.id && msg.Values.imgurl) {
 			this._map.uiManager.insertButton(msg.Values);
+		} else if (msg.MessageId === 'Send_UNO_Command' && msg.Values && msg.Values.Command) {
+			this._map.sendUnoCommand(msg.Values.Command, msg.Values.Args || '');
 		}
 		else if (msg.MessageId === 'Disable_Default_UIAction') {
 			// Disable the default handler and action for a UI command.

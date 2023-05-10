@@ -14,7 +14,7 @@ L.Control.NotebookbarWriter = L.Control.Notebookbar.extend({
 				'name': 'File',
 			},
 			{
-				'text': _('~Home'),
+				'text': _('Hom~e'),
 				'id': this.HOME_TAB_ID,
 				'name': 'Home',
 				'context': 'default|Text|DrawText'
@@ -40,12 +40,12 @@ L.Control.NotebookbarWriter = L.Control.Notebookbar.extend({
 				'name': 'Review'
 			},
 			{
-				'text': _('Format'),
+				'text': _('F~ormat'),
 				'id': '-3',
 				'name': 'Format',
 			},
 			{
-				'text': _('Form'),
+				'text': _('For~m'),
 				'id': 'Form',
 				'name': 'Form',
 			},
@@ -56,7 +56,7 @@ L.Control.NotebookbarWriter = L.Control.Notebookbar.extend({
 				'context': 'Table'
 			},
 			{
-				'text': _('~Draw'),
+				'text': _('Dra~w'),
 				'id': '-9',
 				'name': 'Draw',
 				'context': 'Draw|DrawLine|3DObject|MultiObject|Graphic|DrawFontwork'
@@ -93,12 +93,12 @@ L.Control.NotebookbarWriter = L.Control.Notebookbar.extend({
 	},
 
 	getFileTab: function() {
-		var hasSigning = L.DomUtil.get('document-signing-bar') !== null;
 		var hasRevisionHistory = L.Params.revHistoryEnabled;
 		var hasPrint = !this._map['wopi'].HidePrintOption;
 		var hasRepair = !this._map['wopi'].HideRepairOption;
 		var hasSaveAs = !this._map['wopi'].UserCanNotWriteRelative;
 		var hasShare = this._map['wopi'].EnableShare;
+		var hideDownload = this._map['wopi'].HideExportOption;
 		var hasGroupedDownloadAs = !!window.groupDownloadAsForNb;
 		var hasGroupedSaveAs = window.uiDefaults && window.uiDefaults.saveAsMode === 'group';
 		var hasRunMacro = !(window.enableMacrosExecution  === 'false');
@@ -188,13 +188,13 @@ L.Control.NotebookbarWriter = L.Control.Notebookbar.extend({
 				} : {}
 		]);
 
-		if (hasGroupedDownloadAs) {
+		if (hasGroupedDownloadAs && !hideDownload) {
 			content.push({
 				'id': 'downloadas',
 				'type': 'bigmenubartoolitem',
 				'text': _('Download')
 			});
-		} else {
+		} else if (!hideDownload) {
 			content = content.concat([
 				{
 					'type': 'container',
@@ -236,17 +236,17 @@ L.Control.NotebookbarWriter = L.Control.Notebookbar.extend({
 					'type': 'container',
 					'children': [
 						{
-							'id': 'exportpdf',
+							'id': !window.ThisIsAMobileApp ? 'exportpdf' : 'downloadas-pdf',
 							'type': 'customtoolitem',
 							'text': _('PDF Document (.pdf)'),
-							'command': 'exportpdf',
+							'command': !window.ThisIsAMobileApp ? 'exportpdf' : 'downloadas-pdf',
 							'inlineLabel': true
 						},
 						{
-							'id': 'exportepub',
+							'id': !window.ThisIsAMobileApp ? 'exportepub' : 'downloadas-epub',
 							'type': 'customtoolitem',
 							'text': _('EPUB Document (.epub)'),
-							'command': 'exportepub',
+							'command': !window.ThisIsAMobileApp ? 'exportepub' : 'downloadas-epub',
 							'inlineLabel': true
 						},
 					],
@@ -260,16 +260,10 @@ L.Control.NotebookbarWriter = L.Control.Notebookbar.extend({
 			'children': [
 				hasRepair? {
 					'id': 'repair',
-					'type': (hasSigning ? '' : 'big') + 'menubartoolitem',
+					'type': 'bigmenubartoolitem',
 					'text': _('Repair'),
 					'command': _('Repair')
 				} : {},
-				hasSigning? {
-					'id': 'signdocument',
-					'type': 'menubartoolitem',
-					'text': _('Sign document'),
-					'command': ''
-				} : {}
 			],
 			'vertical': 'true'
 		});
@@ -765,6 +759,16 @@ L.Control.NotebookbarWriter = L.Control.Notebookbar.extend({
 				'type': 'bigtoolitem',
 				'text': _UNO('.uno:TransformDialog'),
 				'command': '.uno:TransformDialog'
+			},
+			{
+				'type': 'bigtoolitem',
+				'text': _UNO('.uno:ChapterNumberingDialog', 'text'),
+				'command': '.uno:ChapterNumberingDialog'
+			},
+			{
+				'type': 'bigtoolitem',
+				'text': _UNO('.uno:ThemeDialog'),
+				'command': '.uno:ThemeDialog'
 			}
 		];
 
@@ -844,7 +848,7 @@ L.Control.NotebookbarWriter = L.Control.Notebookbar.extend({
 			},
 			(this._map['wopi'].EnableRemoteLinkPicker) ? {
 				'type': 'bigcustomtoolitem',
-				'text': _('Pick Link'),
+				'text': _('Smart Picker'),
 				'command': 'remotelink'
 			} : {},
 			{
@@ -1136,6 +1140,11 @@ L.Control.NotebookbarWriter = L.Control.Notebookbar.extend({
 					}
 				],
 				'vertical': 'true'
+			},
+			{
+				'id':'toggledarktheme',
+				'type': 'bigcustomtoolitem',
+				'text': _('Dark Mode')
 			},
 			{
 				'type': 'bigtoolitem',
@@ -1673,9 +1682,9 @@ L.Control.NotebookbarWriter = L.Control.Notebookbar.extend({
 				'command': '.uno:InsertAnnotation'
 			},
 			{
-				'type': 'bigtoolitem',
+				'type': 'bigcustomtoolitem',
 				'text': _UNO('.uno:ShowResolvedAnnotations', 'text'),
-				'command': '.uno:ShowResolvedAnnotations'
+				'command': 'showresolvedannotations'
 			},
 			{
 				'type': 'container',
@@ -2442,13 +2451,13 @@ L.Control.NotebookbarWriter = L.Control.Notebookbar.extend({
 			'enabled': 'true',
 			'children': [
 				{
-					'id': tabName + ' Tab',
+					'id': tabName + '-Tab',
 					'type': 'container',
 					'text': '',
 					'enabled': 'true',
 					'children': [
 						{
-							'id': tabName,
+							'id': tabName + '-container',
 							'type': 'container',
 							'text': '',
 							'enabled': 'true',

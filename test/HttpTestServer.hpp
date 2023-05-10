@@ -22,15 +22,15 @@ static_assert(false, "config.h must be included in the .cpp being compiled");
 /// Handles incoming connections and dispatches to the appropriate handler.
 class ServerRequestHandler final : public SimpleSocketHandler
 {
-public:
-    ServerRequestHandler() {}
-
 private:
     /// Set the socket associated with this ResponseClient.
     void onConnect(const std::shared_ptr<StreamSocket>& socket) override
     {
+        LOG_ASSERT_MSG(socket, "Invalid socket passed to ServerRequestHandler::onConnect");
+
         _socket = socket;
-        LOG_TRC('#' << socket->getFD() << ": Connected to ServerRequestHandler");
+        setLogContext(socket->getFD());
+        LOG_TRC("Connected to ServerRequestHandler");
     }
 
     /// Called after successful socket reads.
@@ -43,12 +43,15 @@ private:
             return;
         }
 
-        const int fd = socket->getFD();
-        LOG_TRC('#' << fd << " handleIncomingMessage.");
-
         Buffer& data = socket->getInBuffer();
-        LOG_TRC('#' << fd << " handleIncomingMessage: buffer has ["
-                    << std::string(data.data(), data.size()));
+        if (data.empty())
+        {
+            LOG_DBG("No data to process from the socket");
+            return;
+        }
+
+        LOG_TRC("HandleIncomingMessage: buffer has:\n"
+                << Util::dumpHex(std::string(data.data(), std::min(data.size(), 256UL))));
 
         // Consume the incoming data by parsing and processing the body.
         http::Request request;
@@ -72,8 +75,9 @@ private:
         // Remove consumed data.
         data.eraseFirst(read);
 
-        LOG_TRC('#' << fd << " handleIncomingMessage: removed " << read << " bytes to have "
-                    << data.size() << " in the buffer.");
+        const int fd = socket->getFD();
+        LOG_TRC("HandleIncomingMessage: removed " << read << " bytes to have " << data.size()
+                                                  << " in the buffer");
 
         if (request.getVerb() == http::Request::VERB_GET)
         {
@@ -83,8 +87,8 @@ private:
                 const auto statusCode
                     = Util::i32FromString(request.getUrl().substr(sizeof("/status")));
                 const auto reason = http::getReasonPhraseForCode(statusCode.first);
-                LOG_TRC('#' << fd << " handleIncomingMessage: got StatusCode " << statusCode.first
-                            << ", sending back: " << reason);
+                LOG_TRC("HandleIncomingMessage: got StatusCode " << statusCode.first
+                                                                 << ", sending back: " << reason);
 
                 http::Response response(http::StatusLine(statusCode.first), fd);
                 if (statusCode.first == 402)

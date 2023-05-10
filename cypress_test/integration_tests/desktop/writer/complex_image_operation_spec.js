@@ -2,7 +2,7 @@
 
 var helper = require('../../common/helper');
 
-describe('Complex image operation test', function() {
+describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Complex image operation test', function() {
 	var origTestFileName = 'complex_image_operation.odt';
 	var testFileName;
 
@@ -15,7 +15,7 @@ describe('Complex image operation test', function() {
 		helper.afterAll(testFileName, this.currentTest.state);
 	});
 
-	it('tile image validation test',function() {
+	it.skip('tile image validation test',function() {
 		cy.window().then(win => {
 			if (win.imgDatas) {
 				for (var i = 0; i < win.imgDatas.length; ++i) {

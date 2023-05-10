@@ -3,7 +3,7 @@
  * L.Control.JSDialog
  */
 
-/* global Hammer app */
+/* global Hammer app _ */
 L.Control.JSDialog = L.Control.extend({
 	options: {
 		snackbarTimeout: 10000
@@ -68,6 +68,13 @@ L.Control.JSDialog = L.Control.extend({
 			return;
 		}
 
+		try {
+			this.dialogs[id].lastFocusedElement.focus();
+		}
+		catch (error) {
+			this.map.focus();
+		}
+
 		var builder = this.clearDialog(id);
 		if (sendCloseEvent !== false && builder)
 			builder.callback('dialog', 'close', {id: '__DIALOG__'}, null, builder);
@@ -106,16 +113,8 @@ L.Control.JSDialog = L.Control.extend({
 		}
 	},
 
-	setTabs: function(tabs, builder) {
-		var dialog = this.dialogs[builder.windowId.toString()];
-		if (dialog) {
-			var tabsContainer = dialog.tabs;
-
-			while (tabsContainer.firstChild)
-				tabsContainer.removeChild(tabsContainer.firstChild);
-
-			tabsContainer.appendChild(tabs);
-		}
+	setTabs: function() {
+		console.error('setTabs: not implemented in dialogs.');
 	},
 
 	selectedTab: function() {
@@ -164,6 +163,7 @@ L.Control.JSDialog = L.Control.extend({
 	createContainer: function(instance, parentContainer) {
 		// it has to be form to handle default button
 		instance.container = L.DomUtil.create('form', 'jsdialog-container ui-dialog ui-widget-content lokdialog_container', parentContainer);
+		instance.container.setAttribute('role', 'dialog');
 		instance.container.id = instance.id;
 
 		// Prevent overlay from getting the click.
@@ -197,6 +197,7 @@ L.Control.JSDialog = L.Control.extend({
 			var title = L.DomUtil.create('span', 'ui-dialog-title', instance.titlebar);
 			title.innerText = instance.title;
 			instance.titleCloseButton = L.DomUtil.create('button', 'ui-button ui-corner-all ui-widget ui-button-icon-only ui-dialog-titlebar-close', instance.titlebar);
+			instance.titleCloseButton.setAttribute('aria-label', _('Close dialog'));
 			L.DomUtil.create('span', 'ui-button-icon ui-icon ui-icon-closethick', instance.titleCloseButton);
 		}
 
@@ -209,13 +210,9 @@ L.Control.JSDialog = L.Control.extend({
 		if (instance.isSnackbar)
 			L.DomUtil.addClass(instance.container, 'snackbar');
 
-		instance.tabs = L.DomUtil.create('div', 'jsdialog-tabs', instance.container);
 		instance.content = L.DomUtil.create('div', 'lokdialog ui-dialog-content ui-widget-content', instance.container);
 
-		// required to exist before builder was launched (for setTabs)
-		this.dialogs[instance.id] = {
-			tabs: instance.tabs
-		};
+		this.dialogs[instance.id] = {};
 	},
 
 	createDialog: function(instance) {
@@ -232,6 +229,38 @@ L.Control.JSDialog = L.Control.extend({
 		var primaryBtn = instance.content.querySelector('#' + instance.defaultButtonId);
 		if (primaryBtn)
 			L.DomUtil.addClass(primaryBtn, 'button-primary');
+	},
+
+	getFirstFocusableElement: function(widget) {
+		return widget.querySelector('[tabIndex="0"]:not(.jsdialog-begin-marker):not([disabled]):not(.hidden)');
+	},
+
+	addFocusHandler: function(instance) {
+		// loop using tab key
+		var beginMarker = L.DomUtil.create('div', 'jsdialog autofilter jsdialog-begin-marker');
+		var endMarker = L.DomUtil.create('div', 'jsdialog autofilter jsdialog-end-marker');
+
+		beginMarker.tabIndex = 0;
+		endMarker.tabIndex = 0;
+
+		instance.container.insertBefore(beginMarker, instance.container.firstChild);
+		instance.container.appendChild(endMarker);
+
+		instance.container.addEventListener('focusin', function(event) {
+			if (event.target == beginMarker || event.target == endMarker) {
+				var firstFocusElement = instance.container.querySelector('[tabIndex="0"]:not(.jsdialog-begin-marker, .jsdialog-end-marker):not([disabled]):not(.hidden)');
+				if (firstFocusElement)
+					firstFocusElement.focus();
+				else if (document.getElementById(instance.init_focus_id)) {
+					document.getElementById(instance.init_focus_id).focus();
+				}
+				else {
+					app.console.error('There is no focusable element in the modal. Either focusId should be given or modal should have a response button.');
+					instance.that.close(instance.id, true);
+					instance.that.map.focus();
+				}
+			}
+		});
 	},
 
 	addHandlers: function(instance) {
@@ -271,24 +300,7 @@ L.Control.JSDialog = L.Control.extend({
 
 		var popupParent = instance.popupParent ? L.DomUtil.get(instance.popupParent) : null;
 
-		if (instance.isModalPopUp || instance.isDocumentAreaPopup) {
-			// close when focus goes out using 'tab' key
-			var beginMarker = L.DomUtil.create('div', 'jsdialog autofilter jsdialog-begin-marker');
-			var endMarker = L.DomUtil.create('div', 'jsdialog autofilter jsdialog-end-marker');
-
-			beginMarker.tabIndex = 0;
-			endMarker.tabIndex = 0;
-
-			instance.container.insertBefore(beginMarker, instance.container.firstChild);
-			instance.container.appendChild(endMarker);
-
-			instance.container.addEventListener('focusin', function(event) {
-				if (event.target == beginMarker || event.target == endMarker) {
-					instance.that.close(instance.id, true);
-					instance.that.map.focus();
-				}
-			});
-		}
+		this.addFocusHandler(instance); // Loop focus for all dialogues.
 
 		var clickToCloseId = instance.clickToClose;
 		if (clickToCloseId && clickToCloseId.indexOf('.uno:') === 0)
@@ -307,7 +319,7 @@ L.Control.JSDialog = L.Control.extend({
 		instance.clickToClose = clickToCloseElement;
 
 		// setup initial focus and helper elements for closing popup
-		var initialFocusElement = instance.container.querySelector('[tabIndex="0"]:not(.jsdialog-begin-marker)');
+		var initialFocusElement = this.getFirstFocusableElement(instance.container);
 
 		if (instance.canHaveFocus && initialFocusElement)
 			initialFocusElement.focus();
@@ -315,17 +327,22 @@ L.Control.JSDialog = L.Control.extend({
 		var focusWidget = instance.init_focus_id ? instance.container.querySelector('[id=\'' + instance.init_focus_id + '\']') : null;
 		if (focusWidget)
 			focusWidget.focus();
-		if (focusWidget && document.activeElement !== focusWidget)
-			console.error('cannot get focus for widget: "' + instance.init_focus_id + '"');
+		if (focusWidget && document.activeElement !== focusWidget) {
+			var firstFocusable = this.getFirstFocusableElement(focusWidget);
+			if (firstFocusable)
+				firstFocusable.focus();
+			else
+				console.error('cannot get focus for widget: "' + instance.init_focus_id + '"');
+		}
 	},
 
 	setPosition: function(instance, updatedPos) {
 		var calculated = false;
 
 		if (instance.nonModal || instance.popupParent) {
-			calculated = true;
 			// in case of toolbox we want to create popup positioned by toolitem not toolbox
 			if (updatedPos) {
+				calculated = true;
 				instance.posx = updatedPos.x;
 				instance.posy = updatedPos.y;
 			}
@@ -348,6 +365,7 @@ L.Control.JSDialog = L.Control.extend({
 			}
 
 			if (parent) {
+				calculated = true;
 				instance.posx = parent.getBoundingClientRect().left;
 				instance.posy = parent.getBoundingClientRect().bottom + 5;
 
@@ -359,6 +377,7 @@ L.Control.JSDialog = L.Control.extend({
 			else {
 				var height = instance.container.getBoundingClientRect().height;
 				if (instance.posy + height > instance.containerParent.getBoundingClientRect().height) {
+					calculated = true;
 					var newTopPosition = instance.posy - height;
 					if (newTopPosition < 0)
 						newTopPosition = 0;
@@ -367,6 +386,7 @@ L.Control.JSDialog = L.Control.extend({
 
 				var width = instance.container.getBoundingClientRect().width;
 				if (instance.posx + width > instance.containerParent.getBoundingClientRect().width) {
+					calculated = true;
 					var newLeftPosition = instance.posx - width;
 					if (newLeftPosition < 0)
 						newLeftPosition = 0;
@@ -379,10 +399,9 @@ L.Control.JSDialog = L.Control.extend({
 			instance.posy = window.innerHeight - instance.container.offsetHeight - 40;
 		}
 
-		if (calculated) {
-			instance.container.style.marginLeft = instance.posx + 'px';
-			instance.container.style.marginTop = instance.posy + 'px';
-		}
+		var positionNotSet = !instance.container.style || !instance.container.style.marginLeft;
+		if (calculated || positionNotSet)
+			this.updatePosition(instance.container, instance.posx, instance.posy);
 	},
 
 	calculateAutoFilterPosition: function(instance) {
@@ -425,14 +444,10 @@ L.Control.JSDialog = L.Control.extend({
 		instance.posx = left + offsetX;
 		instance.posy = top + offsetY;
 
-		instance.container.style.marginLeft = instance.posx + 'px';
-		instance.container.style.marginTop = instance.posy + 'px';
+		this.updatePosition(instance.container, instance.posx, instance.posy);
 	},
 
 	onJSDialog: function(e) {
-		// We will pass this here and there, so we can split the code into smaller functions.
-		// Then we will save this into this.dialogs[].
-
 		/*
 			Dialog types:
 				* Modal (isModalPopUp = true): non-movable + overlay + dimmed background.
@@ -440,7 +455,12 @@ L.Control.JSDialog = L.Control.extend({
 				* Popup (Non-dialog) (isDocumentAreaPopup = true): overlay + no dim.
 		*/
 
+		// We will pass this here and there, so we can split the code into smaller functions.
+		// Then we will save this into this.dialogs[].
 		var instance = e.data;
+
+		// Save last focused element, we will set the focus back to this element after this popup is closed.
+		instance.lastFocusedElement = document.activeElement;
 
 		instance.callback = e.callback;
 		instance.isSnackbar = e.data.type === 'snackbar';
@@ -480,12 +500,8 @@ L.Control.JSDialog = L.Control.extend({
 				var lastKey = dialogs[dialogs.length - 1];
 				var container = this.dialogs[lastKey].container;
 				container.focus();
-				var initialFocusElement =
-					container.querySelector('[tabIndex="0"]:not(.jsdialog-begin-marker)');
+				var initialFocusElement = this.getFirstFocusableElement(container);
 				initialFocusElement.focus();
-			}
-			else if (!this.hasDialogOpened()) {
-				this._map.fire('editorgotfocus');
 			}
 		}
 		else {
@@ -647,7 +663,6 @@ L.Control.JSDialog = L.Control.extend({
 			if (dialogs.length) {
 				var lastKey = dialogs[dialogs.length - 1];
 				this.close(lastKey, true);
-				this.map.focus();
 				return true;
 			}
 		}

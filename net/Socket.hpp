@@ -493,7 +493,7 @@ public:
     virtual void getIOStats(uint64_t &sent, uint64_t &recv) = 0;
 
     /// Append pretty printed internal state to a line
-    virtual void dumpState(std::ostream& os) { os << '\n'; }
+    virtual void dumpState(std::ostream& os) const { os << '\n'; }
 };
 
 // Forward declare WebSocketHandler, which is inherited from ProtocolHandlerInterface.
@@ -627,24 +627,6 @@ public:
         wakeup();
     }
 
-    void removeSockets()
-    {
-        LOG_DBG("Removing all sockets from SocketPoll thread " << _name);
-        assertCorrectThread();
-
-        while (!_pollSockets.empty())
-        {
-            const std::shared_ptr<Socket>& socket = _pollSockets.back();
-            assert(socket);
-
-            LOG_DBG("Removing socket #" << socket->getFD() << " from " << _name);
-            ASSERT_CORRECT_SOCKET_THREAD(socket);
-            socket->resetThreadOwner();
-
-            _pollSockets.pop_back();
-        }
-    }
-
     bool isAlive() const { return (_threadStarted && !_threadFinished) || _runOnClientThread; }
 
     /// Check if we should continue polling
@@ -655,15 +637,6 @@ public:
 
     /// Executed inside the poll in case of a wakeup
     virtual void wakeupHook() {}
-
-    /// The default implementation of our polling thread
-    virtual void pollingThread()
-    {
-        while (continuePolling())
-        {
-            poll(DefaultPollTimeoutMicroS);
-        }
-    }
 
     const std::thread::id &getThreadOwner()
     {
@@ -797,7 +770,7 @@ public:
             wakeup();
     }
 
-    virtual void dumpState(std::ostream& os);
+    virtual void dumpState(std::ostream& os) const;
 
     size_t getSocketCount() const
     {
@@ -851,6 +824,15 @@ protected:
     }
 
 private:
+    /// The default implementation of our polling thread
+    virtual void pollingThread()
+    {
+        while (continuePolling())
+        {
+            poll(DefaultPollTimeoutMicroS);
+        }
+    }
+
     /// Actual poll implementation
     int poll(int64_t timeoutMaxMicroS);
 
@@ -886,6 +868,9 @@ private:
     /// The polling thread entry.
     /// Used to set the thread name and mark the thread as stopped when done.
     void pollingThreadEntry();
+
+    /// Remove all the sockets we own.
+    void removeSockets();
 
     /// Debug name used for logging.
     const std::string _name;
@@ -1192,7 +1177,7 @@ public:
             len = readData(buf.data(), available);
             assert(len == available);
             _bytesRecvd += len;
-            assert(_inBuffer.size() == 0);
+            assert(_inBuffer.empty());
             _inBuffer.append(buf.data(), len);
         }
 #endif
@@ -1203,6 +1188,7 @@ public:
     /// Replace the existing SocketHandler with a new one.
     void setHandler(std::shared_ptr<ProtocolHandlerInterface> handler)
     {
+        LOG_TRC("setHandler");
         _socketHandler = std::move(handler);
         _socketHandler->onConnect(shared_from_this());
     }
@@ -1313,8 +1299,6 @@ protected:
     {
         ASSERT_CORRECT_SOCKET_THREAD(this);
 
-        LOG_TRC("Revents: 0x" << std::hex << events << std::dec);
-
         _socketHandler->checkTimeout(now);
 
         if (!events && _inBuffer.empty())
@@ -1336,10 +1320,17 @@ protected:
                     << (!_inBuffer.empty() ? Util::dumpHex(_inBuffer, ":\n") : std::string())
 #endif
             );
+
             if (read > 0 && closed)
             {
                 // We might have outstanding data to read, wait until readIncomingData returns closed state.
                 LOG_DBG("Closed but will drain incoming data per POLLIN");
+                closed = false;
+            }
+            else if (read < 0 && closed && (last_errno == EAGAIN || last_errno == EINTR))
+            {
+                LOG_DBG("Ignoring POLLHUP to drain incoming data as we had POLLIN but got "
+                        << Util::symbolicErrno(last_errno) << " on read");
                 closed = false;
             }
             else if (read == 0 || (read < 0 && (last_errno == EPIPE || last_errno == ECONNRESET)))

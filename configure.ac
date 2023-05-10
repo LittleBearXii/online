@@ -369,10 +369,6 @@ AC_ARG_ENABLE([werror],
             AS_HELP_STRING([--disable-werror],
                           [Do not turn warnings into errors.]))
 
-AC_ARG_ENABLE([vereign],
-            AS_HELP_STRING([--enable-vereign],
-                          [Set Vereign document_signing_url configuration key to the default app.vereign.com.]))
-
 AC_ARG_ENABLE([cypress],
             AS_HELP_STRING([--enable-cypress],
                            [Enable cypress tests.]))
@@ -914,13 +910,6 @@ AC_DEFINE_UNQUOTED([ENABLE_WELCOME_MESSAGE],$ENABLE_WELCOME_MESSAGE,[Should the 
 AM_CONDITIONAL([ENABLE_WELCOME_MESSAGE], [test "$ENABLE_WELCOME_MESSAGE" = "1"])
 AC_DEFINE_UNQUOTED([WELCOME_URL],["$WELCOME_URL"],[The welcome url of the build.])
 
-VEREIGN_URL=
-if test "$enable_vereign" = "yes"; then
-    VEREIGN_URL="https://app.vereign.com"
-fi
-AC_DEFINE_UNQUOTED([VEREIGN_URL],["$VEREIGN_URL"],[Default value of per_documents.document_signing_url])
-AC_SUBST(VEREIGN_URL)
-
 # Test for build environment
 
 AS_IF([test "$ENABLE_GTKAPP" != true],
@@ -1078,6 +1067,26 @@ if test -n "$STD_FILESYSTEM" ; then
 else
     AC_DEFINE([HAVE_STD_FILESYSTEM],0,[Whether the used C++ has support for std::filesystem.])
     AC_DEFINE([HAVE_STD_FILESYSTEM_EXPERIMENTAL],0,[Whether the std::filesystem is in the experimental header.])
+fi
+
+SYS_RANDOM=
+AC_LANG_PUSH([C++])
+AC_LINK_IFELSE(
+    [AC_LANG_SOURCE([[
+    #include <sys/random.h>
+    int main()
+    {
+        char buffer[8];
+        getrandom(buffer, sizeof(buffer), GRND_NONBLOCK);
+    }
+    ]])],
+    [SYS_RANDOM=TRUE])
+AC_LANG_POP([C++])
+
+if test "$SYS_RANDOM" == "TRUE" ; then
+    AC_DEFINE([HAVE_SYS_RANDOM_H],1,[Define to 1 if you have the <sys/random.h> header file.])
+else
+    AC_DEFINE([HAVE_SYS_RANDOM_H],0,[Define to 1 if you have the <sys/random.h> header file.])
 fi
 
 AS_IF([test -n "$LOKIT_PATH"],
@@ -1379,7 +1388,6 @@ AC_SUBST(ENABLE_SETCAP)
 AC_CONFIG_LINKS([discovery.xml:discovery.xml])
 AC_CONFIG_LINKS([browser/package.json:browser/package.json])
 AC_CONFIG_LINKS([cypress_test/package.json:cypress_test/package.json])
-AC_CONFIG_LINKS([cypress_test/cypress.json:cypress_test/cypress.json])
 AC_CONFIG_COMMANDS_PRE([
 if test "$srcdir" != '.'; then
    dst_dirs="cypress_test/plugins cypress_test/eslint_plugin browser/archived-packages"

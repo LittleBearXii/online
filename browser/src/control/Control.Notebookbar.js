@@ -48,10 +48,12 @@ L.Control.Notebookbar = L.Control.extend({
 		this.map.on('jsdialogaction', this.onJSAction, this);
 		this.map.on('statusbarchanged', this.onStatusbarChange, this);
 		this.map.on('rulerchanged', this.onRulerChange, this);
+		this.map.on('darkmodechanged', this.onDarkModeToggleChange, this);
 
 		this.map.sendUnoCommand('.uno:ToolbarMode?Mode:string=notebookbar_online.ui');
 
 		$('#toolbar-wrapper').addClass('hasnotebookbar');
+		$('.main-nav').removeProp('overflow');
 		$('.main-nav').addClass('hasnotebookbar');
 		$('.main-nav').addClass(docType + '-color-indicator');
 		document.getElementById('document-container').classList.add('notebookbar-active');
@@ -440,6 +442,7 @@ L.Control.Notebookbar = L.Control.extend({
 				for (var context in contexts) {
 					if (contexts[context] === event.context) {
 						tabElement.show();
+						tabElement.removeClass('hidden');
 						if (!tabElement.hasClass('selected'))
 							contextTab = tabElement;
 					} else if (contexts[context] === 'default') {
@@ -475,6 +478,15 @@ L.Control.Notebookbar = L.Control.extend({
 		}
 	},
 
+	onDarkModeToggleChange: function() {
+		if (this.map.uiManager.getDarkModeState()) {
+			$('#toggledarktheme').addClass('selected');
+		}
+		else {
+			$('#toggledarktheme').removeClass('selected');
+		}
+	},
+
 	buildOptionsSectionData: function(childrenArray) {
 		return [
 			{
@@ -497,7 +509,12 @@ L.Control.Notebookbar = L.Control.extend({
 			{
 				'type': 'toolitem',
 				'text': _UNO('.uno:Sidebar', '', true),
-				'command': '.uno:Sidebar'
+				'command': '.uno:SidebarDeck.PropertyDeck'
+			},
+			{
+				'type': 'toolitem',
+				'text': _UNO('.uno:Navigator'),
+				'command': '.uno:Navigator'
 			},
 			{
 				'type': 'toolitem',

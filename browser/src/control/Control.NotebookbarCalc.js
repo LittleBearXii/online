@@ -14,7 +14,7 @@ L.Control.NotebookbarCalc = L.Control.NotebookbarWriter.extend({
 				'name': 'File',
 			},
 			{
-				'text': _('~Home'),
+				'text': _('Hom~e'),
 				'id': this.HOME_TAB_ID,
 				'name': 'Home',
 				'context': 'default|Cell|Text|DrawText'
@@ -40,12 +40,12 @@ L.Control.NotebookbarCalc = L.Control.NotebookbarWriter.extend({
 				'name': 'Review'
 			},
 			{
-				'text': _('Format'),
+				'text': _('F~ormat'),
 				'id': '-7',
 				'name': 'Format'
 			},
 			{
-				'text': _('~Draw'),
+				'text': _('Dra~w'),
 				'id': '-9',
 				'name': 'Draw',
 				'context': 'Draw|DrawLine|3DObject|MultiObject|Graphic|DrawFontwork'
@@ -84,6 +84,7 @@ L.Control.NotebookbarCalc = L.Control.NotebookbarWriter.extend({
 		var hasPrint = !this._map['wopi'].HidePrintOption;
 		var hasRepair = !this._map['wopi'].HideRepairOption;
 		var hasSaveAs = !this._map['wopi'].UserCanNotWriteRelative;
+		var hideDownload = this._map['wopi'].HideExportOption;
 		var hasShare = this._map['wopi'].EnableShare;
 		var hasGroupedDownloadAs = !!window.groupDownloadAsForNb;
 		var hasGroupedSaveAs = window.uiDefaults && window.uiDefaults.saveAsMode === 'group';
@@ -175,7 +176,7 @@ L.Control.NotebookbarCalc = L.Control.NotebookbarWriter.extend({
 				} : {}
 		]);
 
-		if (hasGroupedDownloadAs) {
+		if (hasGroupedDownloadAs && !hideDownload) {
 			content.push({
 				'id': 'downloadas',
 				'type': 'bigmenubartoolitem',
@@ -196,7 +197,7 @@ L.Control.NotebookbarCalc = L.Control.NotebookbarWriter.extend({
 					'vertical': 'true'
 				});
 			}
-		} else {
+		} else if (!hideDownload) {
 			content = content.concat([
 				{
 					'id': 'file-downloadas-ods-downloadas-csv',
@@ -241,10 +242,10 @@ L.Control.NotebookbarCalc = L.Control.NotebookbarWriter.extend({
 					'type': 'container',
 					'children': [
 						{
-							'id': 'exportpdf',
+							'id': !window.ThisIsAMobileApp ? 'exportpdf' : 'downloadas-pdf',
 							'type': 'customtoolitem',
 							'text': _('PDF Document (.pdf)'),
-							'command': 'exportpdf',
+							'command': !window.ThisIsAMobileApp ? 'exportpdf' : 'downloadas-pdf',
 							'inlineLabel': true
 						},
 						hasRepair? {
@@ -257,6 +258,19 @@ L.Control.NotebookbarCalc = L.Control.NotebookbarWriter.extend({
 					'vertical': 'true'
 				}
 			]);
+		} else if (hasRepair) {
+			content.push({
+				'type': 'container',
+				'children': [
+					{
+						'id': 'repair',
+						'type': 'bigmenubartoolitem',
+						'text': _('Repair'),
+						'command': _('Repair')
+					}
+				],
+				'vertical': 'true'
+			});
 		}
 
 		content.push({
@@ -1031,6 +1045,11 @@ L.Control.NotebookbarCalc = L.Control.NotebookbarWriter.extend({
 				'command': _('Show Status Bar')
 			},
 			{
+				'id':'toggledarktheme',
+				'type': 'bigmenubartoolitem',
+				'text': _('Dark Mode')
+			},
+			{
 				'type': 'bigtoolitem',
 				'text': _UNO('.uno:Sidebar'),
 				'command': '.uno:Sidebar'
@@ -1124,7 +1143,7 @@ L.Control.NotebookbarCalc = L.Control.NotebookbarWriter.extend({
 			},
 			(this._map['wopi'].EnableRemoteLinkPicker) ? {
 				'type': 'bigcustomtoolitem',
-				'text': _('Pick Link'),
+				'text': _('Smart Picker'),
 				'command': 'remotelink'
 			} : {},
 			{

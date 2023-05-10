@@ -3,7 +3,7 @@
  * Toolbar handler
  */
 
-/* global app $ window vex sanitizeUrl brandProductName brandProductURL _ */
+/* global app $ window sanitizeUrl brandProductName brandProductURL _ */
 L.Map.include({
 
 	// a mapping of uno commands to more readable toolbar items
@@ -343,7 +343,8 @@ L.Map.include({
 	sendUnoCommand: function (command, json, force) {
 		if ((command.startsWith('.uno:Sidebar') && !command.startsWith('.uno:SidebarShow')) ||
 			command.startsWith('.uno:SlideChangeWindow') || command.startsWith('.uno:CustomAnimation') ||
-			command.startsWith('.uno:MasterSlidesPanel') || command.startsWith('.uno:ModifyPage')) {
+			command.startsWith('.uno:MasterSlidesPanel') || command.startsWith('.uno:ModifyPage') ||
+			command.startsWith('.uno:Navigator')) {
 
 			// sidebar control is present only in desktop/tablet case
 			if (this.sidebar) {
@@ -548,9 +549,12 @@ L.Map.include({
 			productName = (typeof brandProductName !== 'undefined') ? brandProductName : 'Collabora Online Development Edition (unbranded)';
 		}
 
-		map.uiManager.showInfoModal(id, '', '', '', null, false);
+		map.uiManager.showYesNoButton(id + '-box', productName, '', _('OK'), null, null, null, true);
+		var box = document.getElementById(id + '-box');
+		var innerDiv = L.DomUtil.create('div', '', null);
+		box.insertBefore(innerDiv, box.firstChild);
+		innerDiv.innerHTML = data;
 
-		document.getElementById(id).innerHTML = data;
 		this.onHelpOpen(id, map, productName);
 	},
 
@@ -631,7 +635,7 @@ L.Map.include({
 		var productString = _('This version of %productName is powered by');
 		var productNameWithURL;
 		if (!window.ThisIsAMobileApp)
-			productNameWithURL = '<a href="' + sanitizeUrl.sanitizeUrl(productURL) +
+			productNameWithURL = '<a href="' + sanitizeUrl(productURL) +
 								 '" target="_blank">' + productName + '</a>';
 		else
 			productNameWithURL = productName;
@@ -644,8 +648,11 @@ L.Map.include({
 
 		var map = this;
 
-		map.uiManager.showInfoModal(aboutDialogId + '-box', '', '', '', '', null, false);
-		document.getElementById(aboutDialogId + '-box').innerHTML = content.outerHTML;
+		map.uiManager.showYesNoButton(aboutDialogId + '-box', productName, '', _('OK'), null, null, null, true);
+		var box = document.getElementById(aboutDialogId + '-box');
+		var innerDiv = L.DomUtil.create('div', '', null);
+		box.insertBefore(innerDiv, box.firstChild);
+		innerDiv.innerHTML = content.outerHTML;
 
 		var form = document.getElementById('modal-dialog-about-dialog-box');
 		form.addEventListener('click', this.aboutDialogClickHandler.bind(this));
@@ -675,22 +682,26 @@ L.Map.include({
 			{
 				id: 'hyperlink-text-box-label',
 				type: 'fixedtext',
-				text: _('Text')
+				text: _('Text'),
+				labelFor: 'hyperlink-text-box'
 			},
 			{
 				id: 'hyperlink-text-box',
 				type: 'multilineedit',
-				text: defaultText
+				text: defaultText,
+				labelledBy: 'hyperlink-text-box-label'
 			},
 			{
 				id: 'hyperlink-link-box-label',
 				type: 'fixedtext',
-				text: _('Link')
+				text: _('Link'),
+				labelFor: 'hyperlink-link-box'
 			},
 			{
 				id: 'hyperlink-link-box',
 				type: 'edit',
-				text: defaultLink
+				text: defaultLink,
+				labelledBy: 'hyperlink-link-box-label'
 			},
 			{
 				type: 'buttonbox',
@@ -781,9 +792,7 @@ L.Map.include({
 	},
 
 	formulabarBlur: function() {
-		var hasJSDialogOpened = this.jsdialog && this.jsdialog.hasDialogOpened();
-		var hasVexOpened = Object.keys(vex.getAll()).length > 0;
-		if (!hasVexOpened && !hasJSDialogOpened)
+		if (!this.uiManager.isAnyDialogOpen())
 			this.focus();
 	},
 
@@ -951,6 +960,15 @@ L.Map.include({
 			break;
 		case 'closetablet':
 			this.uiManager.enterReadonlyOrClose();
+			break;
+		case 'showresolvedannotations':
+			var items = this['stateChangeHandler'];
+			var val = items.getItemValue('.uno:ShowResolvedAnnotations');
+			val = (val === 'true' || val === true);
+			this.showResolvedComments(!val);
+			break;
+		case 'toggledarktheme':
+			this.uiManager.toggleDarkMode();
 			break;
 		default:
 			console.error('unknown dispatch: "' + action + '"');
