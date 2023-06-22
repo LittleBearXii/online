@@ -83,7 +83,12 @@ if !ENABLE_DEBUG
 AM_CPPFLAGS += -DNDEBUG
 endif
 
-AM_LDFLAGS = -pthread -Wl,-E -lpam $(ZLIB_LIBS) $(ZSTD_LIBS) ${PNG_LIBS}
+AM_LDFLAGS = -Wl,-E -lpam $(ZLIB_LIBS) $(ZSTD_LIBS) ${PNG_LIBS}
+
+# Clang's linker doesn't like -pthread.
+if !HAVE_CLANG
+AM_LDFLAGS += -pthread
+endif
 
 if ENABLE_SSL
 AM_LDFLAGS += ${OPENSSL_LIBS}
@@ -259,6 +264,7 @@ wsd_headers = wsd/Admin.hpp \
               wsd/AdminModel.hpp \
               wsd/Auth.hpp \
               wsd/ClientSession.hpp \
+              wsd/ContentSecurityPolicy.hpp \
               wsd/DocumentBroker.hpp \
               wsd/ProxyProtocol.hpp \
               wsd/Exceptions.hpp \
@@ -363,7 +369,6 @@ EXTRA_DIST = discovery.xml \
              coolwsd.spec \
              coolwsd.xml.in \
              coolwsd.service \
-             sysconfig.coolwsd \
              debian/compat \
              debian/copyright \
              debian/coolwsd.preinst \
@@ -432,8 +437,8 @@ clean-am: cleanup clean-binPROGRAMS clean-generic clean-libtool clean-local clea
 
 clean-local:
 	$(CLEANUP_COMMAND)
-	if test "z@JAILS_PATH@" != "z"; then rm -rf "@JAILS_PATH@"; fi
-	if test "z@SYSTEMPLATE_PATH@" != "z"; then rm -rf "@SYSTEMPLATE_PATH@"; fi
+	if test "z@SYSTEMPLATE_PATH@" != "z"; then rm -rf "@SYSTEMPLATE_PATH@" || echo "WARNING: failed to remove the systemplate"; fi
+	if test "z@JAILS_PATH@" != "z"; then rm -rf "@JAILS_PATH@" || echo "WARNING: failed to remove all jails cleanly"; fi
 	rm -rf "${top_srcdir}/loleaflet"
 	rm -rf loolconfig loolconvert loolforkit loolmap loolmount # kill old binaries
 	rm -rf loolwsd loolwsd_fuzzer coolwsd_fuzzer loolstress loolsocketdump
@@ -456,28 +461,25 @@ setup-wsd: all @JAILS_PATH@
 	@cp $(abs_top_srcdir)/test/data/hello.odp $(abs_top_srcdir)/test/data/hello-world.odp
 	@echo
 
+COMMON_PARAMS = \
+	--o:sys_template_path="@SYSTEMPLATE_PATH@" \
+	--o:security.capabilities="$(CAPABILITIES)" \
+	--o:child_root_path="@JAILS_PATH@" --o:storage.filesystem[@allow]=true \
+	--o:ssl.cert_file_path="$(abs_top_srcdir)/etc/cert.pem" \
+	--o:ssl.key_file_path="$(abs_top_srcdir)/etc/key.pem" \
+	--o:ssl.ca_file_path="$(abs_top_srcdir)/etc/ca-chain.cert.pem" \
+	--o:admin_console.username=admin --o:admin_console.password=admin
+
 run: setup-wsd
-	./coolwsd --o:sys_template_path="@SYSTEMPLATE_PATH@" \
-			  --o:security.capabilities="$(CAPABILITIES)" \
-			  --o:child_root_path="@JAILS_PATH@" --o:storage.filesystem[@allow]=true \
-			  --o:ssl.cert_file_path="$(abs_top_srcdir)/etc/cert.pem" \
-			  --o:ssl.key_file_path="$(abs_top_srcdir)/etc/key.pem" \
-			  --o:ssl.ca_file_path="$(abs_top_srcdir)/etc/ca-chain.cert.pem" \
-			  --o:admin_console.username=admin --o:admin_console.password=admin \
-			  --o:logging.file[@enable]=${OUTPUT_TO_FILE} --o:logging.level=trace \
-			  --o:trace_event[@enable]=true
+	./coolwsd $(COMMON_PARAMS) \
+		--o:logging.file[@enable]=${OUTPUT_TO_FILE} --o:logging.level=trace \
+		--o:trace_event[@enable]=true
 
 if ENABLE_DEBUG
 run-one: setup-wsd
-	./coolwsd --o:sys_template_path="@SYSTEMPLATE_PATH@" \
-			  --o:security.capabilities="$(CAPABILITIES)" \
-			  --o:child_root_path="@JAILS_PATH@" --o:storage.filesystem[@allow]=true \
-			  --o:ssl.cert_file_path="$(abs_top_srcdir)/etc/cert.pem" \
-			  --o:ssl.key_file_path="$(abs_top_srcdir)/etc/key.pem" \
-			  --o:ssl.ca_file_path="$(abs_top_srcdir)/etc/ca-chain.cert.pem" \
-			  --o:admin_console.username=admin --o:admin_console.password=admin \
-			  --o:logging.file[@enable]=true --o:logging.level=trace \
-			  --singlekit
+	./coolwsd $(COMMON_PARAMS) \
+		--o:logging.file[@enable]=true --o:logging.level=trace \
+		--singlekit
 endif
 
 sync-writer:

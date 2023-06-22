@@ -187,7 +187,7 @@ SocketPoll::SocketPoll(std::string threadName)
 #endif
         )
     {
-        throw std::runtime_error("Failed to allocate pipe for SocketPoll [" + threadName + "] waking.");
+        throw std::runtime_error("Failed to allocate pipe for SocketPoll [" + _name + "] waking.");
     }
 
     LOG_DBG("New SocketPoll [" << _name << "] owned by " << Log::to_string(_owner));
@@ -319,7 +319,7 @@ int SocketPoll::poll(int64_t timeoutMaxMicroS)
     if (_runOnClientThread)
         checkAndReThread();
     else
-        assertCorrectThread();
+        ASSERT_CORRECT_SOCKET_THREAD(this);
 
 #if ENABLE_DEBUG
     // perturb - to rotate errors among several busy sockets.
@@ -514,7 +514,7 @@ void SocketPoll::removeSockets()
 {
     LOG_DBG("Removing all " << _pollSockets.size() + _newSockets.size()
                             << " sockets from SocketPoll thread " << _name);
-    assertCorrectThread();
+    ASSERT_CORRECT_SOCKET_THREAD(this);
 
     while (!_pollSockets.empty())
     {
@@ -681,7 +681,7 @@ void ServerSocket::dumpState(std::ostream& os)
 void SocketDisposition::execute()
 {
     // We should have hard ownership of this socket.
-    assert(_socket->getThreadOwner() == std::this_thread::get_id());
+    ASSERT_CORRECT_SOCKET_THREAD(_socket);
     if (_socketMove)
     {
         // Drop pretentions of ownership before _socketMove.
@@ -1126,21 +1126,15 @@ bool StreamSocket::parseHeader(const char *clientName,
     {
         request.read(message);
 
-        Log::StreamLogger logger = Log::info();
-        if (logger.enabled())
-        {
-            logger << '#' << getFD() << ": " << clientName << " HTTP Request: "
-                   << request.getMethod() << ' '
-                   << request.getURI() << ' '
-                   << request.getVersion();
-
-            for (const auto& it : request)
-            {
-                logger << " / " << it.first << ": " << it.second;
-            }
-
-            LOG_END_FLUSH(logger);
-        }
+        LOG_INF('#' << getFD() << ": " << clientName << " HTTP Request: " << request.getMethod()
+                    << ' ' << request.getURI() << ' ' << request.getVersion() <<
+                [&](auto& log)
+                {
+                    for (const auto& it : request)
+                    {
+                        log << " / " << it.first << ": " << it.second;
+                    }
+                });
 
         const std::streamsize contentLength = request.getContentLength();
         const auto offset = itBody - _inBuffer.begin();

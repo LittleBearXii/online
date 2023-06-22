@@ -24,6 +24,7 @@
 #include <Poco/URI.h>
 
 #include "Log.hpp"
+#include "QuarantineUtil.hpp"
 #include "TileDesc.hpp"
 #include "Util.hpp"
 #include "net/Socket.hpp"
@@ -48,18 +49,18 @@ class Message;
 /// document using the LibreOfficeKit API. It isn't actually a child of the WSD process, but a
 /// grandchild. The comments loosely talk about "child" anyway.
 
-class ChildProcess : public WSProcess
+class ChildProcess final : public WSProcess
 {
 public:
     /// @param pid is the process ID of the child.
     /// @param socket is the underlying Socket to the child.
-    ChildProcess(const pid_t pid,
-                 const std::string& jailId,
-                 const std::shared_ptr<StreamSocket>& socket,
-                 const Poco::Net::HTTPRequest &request) :
-        WSProcess("ChildProcess", pid, socket, std::make_shared<WebSocketHandler>(socket, request)),
-        _jailId(jailId),
-        _smapsFD(-1)
+    template <typename T>
+    ChildProcess(const pid_t pid, const std::string& jailId,
+                 const std::shared_ptr<StreamSocket>& socket, const T& request)
+        : WSProcess("ChildProcess", pid, socket,
+                    std::make_shared<WebSocketHandler>(socket, request))
+        , _jailId(jailId)
+        , _smapsFD(-1)
     {
     }
 
@@ -338,7 +339,7 @@ public:
 
     /// Are we running in either shutdown, or the polling thread.
     /// Asserts in the debug builds, otherwise just logs.
-    void assertCorrectThread() const;
+    void assertCorrectThread(const char* filename = "?", int line = 0) const;
 
     /// Pretty print internal state to a stream.
     void dumpState(std::ostream& os);
@@ -707,7 +708,7 @@ private:
     /// Request manager.
     /// Encapsulates common fields for
     /// Save and Upload requests.
-    class RequestManager
+    class RequestManager final
     {
     public:
         RequestManager(std::chrono::milliseconds minTimeBetweenRequests)
@@ -1224,7 +1225,7 @@ private:
 
     /// The state of the document.
     /// This regulates all other primary operations.
-    class DocumentState
+    class DocumentState final
     {
     public:
         /// Strictly speaking, these are phases that are directional.
@@ -1407,6 +1408,9 @@ private:
     /// Updated right before uploading.
     StorageBase::Attributes _lastStorageAttrs;
 
+    /// The Quarantine manager.
+    std::unique_ptr<Quarantine> _quarantine;
+
     std::unique_ptr<TileCache> _tileCache;
     std::atomic<bool> _isModified;
     int _cursorPosX;
@@ -1456,12 +1460,10 @@ private:
     const bool _alwaysSaveOnExit;
 
     // Last member.
-#ifdef ENABLE_DEBUG
     /// The UnitWSD instance. We capture it here since
     /// this is our instance, but the test framework
     /// has a single global instance via UnitWSD::get().
-    UnitWSD& _unitWsd;
-#endif
+    UnitWSD* const _unitWsd;
 };
 
 #if !MOBILEAPP

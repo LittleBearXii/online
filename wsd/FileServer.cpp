@@ -54,6 +54,8 @@
 #if !MOBILEAPP
 #include <net/HttpHelper.hpp>
 #endif
+#include <ContentSecurityPolicy.hpp>
+
 using Poco::Net::HTMLForm;
 using Poco::Net::HTTPBasicCredentials;
 using Poco::Net::HTTPRequest;
@@ -239,7 +241,7 @@ bool FileServerRequestHandler::isAdminLoggedIn(const HTTPRequest& request,
     }
 
     // Check if the user is allowed to use the admin console
-    if (config.getBool("admin_console.enable_pam", "false"))
+    if (config.getBool("admin_console.enable_pam", false))
     {
         // use PAM - it needs the username too
         if (!isPamAuthOk(userProvidedUsr, userProvidedPwd))
@@ -714,9 +716,9 @@ void FileServerRequestHandler::sendError(int errorCode, const Poco::Net::HTTPReq
     std::string headers = extraHeader;
     if (!shortMessage.empty())
     {
-        Poco::URI requestUri(request.getURI());
-        std::string pathSanitized;
-        Poco::URI::encode(requestUri.getPath(), "", pathSanitized);
+        const Poco::URI requestUri(request.getURI());
+        const std::string pathSanitized =
+            Util::encodeURIComponent(requestUri.getPath(), std::string());
         // Let's keep message as plain text to avoid complications.
         headers += "Content-Type: text/plain charset=UTF-8\r\n";
         body = "Error: " + shortMessage + '\n' +
@@ -787,6 +789,7 @@ void FileServerRequestHandler::readDirToHash(const std::string &basePath, const 
                 strm.avail_in = size;
                 strm.avail_out = compSize;
                 strm.next_out = (unsigned char *)&cbuf[0];
+                strm.total_out = strm.total_in = 0;
 
                 deflate(&strm, Z_FINISH);
 
@@ -897,10 +900,9 @@ void FileServerRequestHandler::preprocessFile(const HTTPRequest& request,
     // Escape bad characters in access token.
     // This is placed directly in javascript in cool.html, we need to make sure
     // that no one can do anything nasty with their clever inputs.
-    std::string escapedAccessToken, escapedAccessHeader, escapedPostmessageOrigin;
-    Poco::URI::encode(accessToken, "'", escapedAccessToken);
-    Poco::URI::encode(accessHeader, "'", escapedAccessHeader);
-    Poco::URI::encode(postMessageOrigin, "'", escapedPostmessageOrigin);
+    const std::string escapedAccessToken = Util::encodeURIComponent(accessToken, "'");
+    const std::string escapedAccessHeader = Util::encodeURIComponent(accessHeader, "'");
+    const std::string escapedPostmessageOrigin = Util::encodeURIComponent(postMessageOrigin, "'");
 
     unsigned long tokenTtl = 0;
     if (!accessToken.empty())
@@ -929,6 +931,8 @@ void FileServerRequestHandler::preprocessFile(const HTTPRequest& request,
 
     std::string responseRoot = cnxDetails.getResponseRoot();
     std::string userInterfaceMode;
+    std::string userInterfaceTheme;
+
 
     Poco::replaceInPlace(preprocess, std::string("%ACCESS_TOKEN%"), escapedAccessToken);
     Poco::replaceInPlace(preprocess, std::string("%ACCESS_TOKEN_TTL%"), std::to_string(tokenTtl));
@@ -937,7 +941,8 @@ void FileServerRequestHandler::preprocessFile(const HTTPRequest& request,
     Poco::replaceInPlace(preprocess, std::string("%VERSION%"), std::string(COOLWSD_VERSION_HASH));
     Poco::replaceInPlace(preprocess, std::string("%COOLWSD_VERSION%"), std::string(COOLWSD_VERSION));
     Poco::replaceInPlace(preprocess, std::string("%SERVICE_ROOT%"), responseRoot);
-    Poco::replaceInPlace(preprocess, std::string("%UI_DEFAULTS%"), uiDefaultsToJSON(uiDefaults, userInterfaceMode));
+    Poco::replaceInPlace(preprocess, std::string("%UI_DEFAULTS%"), uiDefaultsToJSON(uiDefaults, userInterfaceMode, userInterfaceTheme));
+    Poco::replaceInPlace(preprocess, std::string("%UI_THEME%"), userInterfaceTheme);
     Poco::replaceInPlace(preprocess, std::string("%POSTMESSAGE_ORIGIN%"), escapedPostmessageOrigin);
     Poco::replaceInPlace(preprocess, std::string("%CHECK_FILE_INFO_OVERRIDE%"),
                          checkFileInfoToJSON(checkfileinfo_override));
@@ -954,8 +959,7 @@ void FileServerRequestHandler::preprocessFile(const HTTPRequest& request,
 
     bool useIntegrationTheme = config.getBool("user_interface.use_integration_theme", true);
     bool hasIntegrationTheme = (theme != "") && FileUtil::Stat(COOLWSD::FileServerRoot + "/browser/dist/" + theme).exists();
-    std::string escapedTheme;
-    Poco::URI::encode(theme, "'", escapedTheme);
+    const std::string escapedTheme = Util::encodeURIComponent(theme, "'");
     const std::string themePreFix = hasIntegrationTheme && useIntegrationTheme ? escapedTheme + "/" : "";
     const std::string linkCSS("<link rel=\"stylesheet\" href=\"%s/browser/" COOLWSD_VERSION_HASH "/" + themePreFix + "%s.css\">");
     const std::string scriptJS("<script src=\"%s/browser/" COOLWSD_VERSION_HASH "/" + themePreFix + "%s.js\"></script>");
@@ -1001,6 +1005,9 @@ void FileServerRequestHandler::preprocessFile(const HTTPRequest& request,
     Poco::replaceInPlace(preprocess, std::string("%ENABLE_WELCOME_MSG%"), enableWelcomeMessage);
     Poco::replaceInPlace(preprocess, std::string("%AUTO_SHOW_WELCOME%"), autoShowWelcome);
 
+    std::string enableAccessibility = stringifyBoolFromConfig(config, "accessibility.enable", false);
+    Poco::replaceInPlace(preprocess, std::string("%ENABLE_ACCESSIBILITY%"), enableAccessibility);
+
     // the config value of 'notebookbar/tabbed' or 'classic/compact' overrides the UIMode
     // from the WOPI
     std::string userInterfaceModeConfig = config.getString("user_interface.mode", "default");
@@ -1015,7 +1022,7 @@ void FileServerRequestHandler::preprocessFile(const HTTPRequest& request,
 
     // default to the notebookbar if the value is "default" or whatever
     // nonsensical
-    if (userInterfaceMode != "classic" && userInterfaceMode != "notebookbar")
+    if (enableAccessibility == "true" || (userInterfaceMode != "classic" && userInterfaceMode != "notebookbar"))
         userInterfaceMode = "notebookbar";
 
     Poco::replaceInPlace(preprocess, std::string("%USER_INTERFACE_MODE%"), userInterfaceMode);
@@ -1031,6 +1038,7 @@ void FileServerRequestHandler::preprocessFile(const HTTPRequest& request,
     std::string enableMacrosExecution = stringifyBoolFromConfig(config, "security.enable_macros_execution", false);
     Poco::replaceInPlace(preprocess, std::string("%ENABLE_MACROS_EXECUTION%"), enableMacrosExecution);
 
+
     if (!config.getBool("feedback.show", true) && config.getBool("home_mode.enable", false))
     {
         Poco::replaceInPlace(preprocess, std::string("%AUTO_SHOW_FEEDBACK%"), (std::string)"false");
@@ -1044,8 +1052,7 @@ void FileServerRequestHandler::preprocessFile(const HTTPRequest& request,
     Poco::replaceInPlace(preprocess, std::string("%FEEDBACK_URL%"), std::string(FEEDBACK_URL));
     Poco::replaceInPlace(preprocess, std::string("%WELCOME_URL%"), std::string(WELCOME_URL));
 
-    std::string escapedBuyProduct;
-    Poco::URI::encode(buyProduct, "'", escapedBuyProduct);
+    const std::string escapedBuyProduct = Util::encodeURIComponent(buyProduct, "'");
     Poco::replaceInPlace(preprocess, std::string("%BUYPRODUCT_URL%"), escapedBuyProduct);
 
     Poco::replaceInPlace(preprocess, std::string("%DEEPL_ENABLED%"), (config.getBool("deepl.enabled", false) ? std::string("true"): std::string("false")));
@@ -1055,20 +1062,48 @@ void FileServerRequestHandler::preprocessFile(const HTTPRequest& request,
 
     const std::string mimeType = "text/html";
 
-    std::ostringstream cspOss;
-    cspOss << "Content-Security-Policy: default-src 'none'; "
-        "frame-src 'self' " << WELCOME_URL << " " << FEEDBACK_URL << " " << buyProduct << "; "
-           "connect-src 'self' https://www.zotero.org https://api.zotero.org "
-           << cnxDetails.getWebSocketUrl() << " " << cnxDetails.getWebServerUrl() << " "
-           << indirectionURI.getAuthority() << "; "
-           "script-src 'unsafe-inline' 'self'; "
-           "style-src 'self' 'unsafe-inline'; "
-           "font-src 'self' data:; "
-           "object-src 'self' blob:; "
-           "media-src 'self'; ";
+    // Document signing: if endpoint URL is configured, whitelist that for
+    // iframe purposes.
+    ContentSecurityPolicy csp;
+    csp.appendDirective("default-src", "'none'");
+    csp.appendDirective("frame-src", "'self'");
+    csp.appendDirective("frame-src", WELCOME_URL);
+    csp.appendDirective("frame-src", FEEDBACK_URL);
+    csp.appendDirective("frame-src", buyProduct);
+    csp.appendDirective("frame-src", "blob:"); // Equivalent to unsafe-eval!
+    csp.appendDirective("connect-src", "'self'");
+    csp.appendDirective("connect-src", "https://www.zotero.org");
+    csp.appendDirective("connect-src", "https://api.zotero.org");
+    csp.appendDirective("connect-src", cnxDetails.getWebSocketUrl());
+    csp.appendDirective("connect-src", cnxDetails.getWebServerUrl());
+    csp.appendDirective("connect-src", indirectionURI.getAuthority());
+    csp.appendDirective("script-src", "'self'");
+    csp.appendDirective("script-src", "'unsafe-inline'");
+    csp.appendDirective("style-src", "'self'");
+    csp.appendDirective("style-src", "'unsafe-inline'");
+    csp.appendDirective("font-src", "'self'");
+    csp.appendDirective("font-src", "data:"); // Equivalent to unsafe-inline!
+    csp.appendDirective("object-src", "'self'");
+    csp.appendDirective("object-src", "blob:"); // Equivalent to unsafe-eval!
+    csp.appendDirective("media-src", "'self'");
+    csp.appendDirective("img-src", "'self'");
+    csp.appendDirective("img-src", "data:"); // Equivalent to unsafe-inline!
+    csp.appendDirective("img-src", "https://www.collaboraoffice.com/");
 
     // Frame ancestors: Allow coolwsd host, wopi host and anything configured.
-    std::string configFrameAncestor = config.getString("net.frame_ancestors", "");
+    const std::string configFrameAncestor = config.getString("net.frame_ancestors", "");
+    if (!configFrameAncestor.empty())
+    {
+        static bool warned = false;
+        if (!warned)
+        {
+            warned = true;
+            LOG_WRN("The config entry net.frame_ancestors is obsolete and will be removed in the "
+                    "future. Please add 'frame-ancestors "
+                    << configFrameAncestor << "' in the net.content_security_policy config");
+        }
+    }
+
     std::string frameAncestors = configFrameAncestor;
     Poco::URI uriHost(cnxDetails.getWebSocketUrl());
     if (uriHost.getHost() != configFrameAncestor)
@@ -1078,11 +1113,9 @@ void FileServerRequestHandler::preprocessFile(const HTTPRequest& request,
     {
         if (param.first == "WOPISrc")
         {
-            std::string wopiFrameAncestor;
-            Poco::URI::decode(param.second, wopiFrameAncestor);
-            Poco::URI uriWopiFrameAncestor(wopiFrameAncestor);
+            const Poco::URI uriWopiFrameAncestor(Util::decodeURIComponent(param.second));
             // Remove parameters from URL
-            wopiFrameAncestor = uriWopiFrameAncestor.getHost();
+            const std::string& wopiFrameAncestor = uriWopiFrameAncestor.getHost();
             if (wopiFrameAncestor != uriHost.getHost() && wopiFrameAncestor != configFrameAncestor)
             {
                 frameAncestors += ' ' + wopiFrameAncestor + ":*";
@@ -1092,26 +1125,23 @@ void FileServerRequestHandler::preprocessFile(const HTTPRequest& request,
         }
     }
 
-    std::string imgSrc = "img-src 'self' data: https://www.collaboraoffice.com/";
     if (!frameAncestors.empty())
     {
         LOG_TRC("Allowed frame ancestors: " << frameAncestors);
         // X-Frame-Options supports only one ancestor, ignore that
         //(it's deprecated anyway and CSP works in all major browsers)
-        // frame anchestors are also allowed for img-src in order to load the views avatars
-        cspOss << imgSrc << " " << frameAncestors << "; "
-                << "frame-ancestors " << frameAncestors;
-        std::string escapedFrameAncestors;
-        Poco::URI::encode(frameAncestors, "'", escapedFrameAncestors);
+        // frame ancestors are also allowed for img-src in order to load the views avatars
+        csp.appendDirective("img-src", frameAncestors);
+        csp.appendDirective("frame-ancestors", frameAncestors);
+        const std::string escapedFrameAncestors = Util::encodeURIComponent(frameAncestors, "'");
         Poco::replaceInPlace(preprocess, std::string("%FRAME_ANCESTORS%"), escapedFrameAncestors);
     }
     else
     {
         LOG_TRC("Denied all frame ancestors");
-        cspOss << imgSrc << "; ";
     }
 
-    cspOss << "\r\n";
+    csp.merge(config.getString("net.content_security_policy", ""));
 
     std::ostringstream oss;
     oss << "HTTP/1.1 200 OK\r\n"
@@ -1127,7 +1157,7 @@ void FileServerRequestHandler::preprocessFile(const HTTPRequest& request,
         "Referrer-Policy: no-referrer\r\n";
 
     // Append CSP to response headers too
-    oss << cspOss.str();
+    oss << "Content-Security-Policy: " << csp.generate() << "\r\n";
 
     // Setup HTTP Public key pinning
     if ((COOLWSD::isSSLEnabled() || COOLWSD::isSSLTermination()) && config.getBool("ssl.hpkp[@enable]", false))

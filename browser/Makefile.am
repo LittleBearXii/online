@@ -249,6 +249,7 @@ COOL_JS_LST =\
 	src/layer/ImageOverlay.js \
 	src/layer/marker/ProgressOverlay.js \
 	src/layer/marker/TextInput.js \
+	src/layer/marker/A11yTextInput.js \
 	src/layer/marker/Icon.js \
 	src/layer/marker/Icon.Default.js \
 	src/layer/marker/Marker.js \
@@ -397,6 +398,8 @@ INTERMEDIATE_DIR ?= $(if $(IS_SEPARATE),$(abs_builddir)/debug,$(abs_builddir)/re
 
 EXTRA_DIST = $(shell find . -type f -not -path './.git/*' -not -path './node_modules/*' | sed 's/.\///')
 
+COOL_JS_BUNDLE = $(patsubst %.ts,%.js,$(COOL_JS_WEBORDER))
+
 define bundle_cool
 	$(if $(IS_SEPARATE),\
 		@touch $@,
@@ -406,7 +409,7 @@ define bundle_cool
 			-DMOBILEAPPNAME="$(APP_NAME)" \
 			-DVERSION=$(COOL_VERSION) \
 			-DCOPYRIGHT=$(srcdir)/src/copyright.js \
-			-DCOOL_JS=$(subst $(SPACE),$(COMMA),$(patsubst src/%.ts,$(DIST_FOLDER)/src/%.js,$(COOL_JS_WEBORDER))) \
+			-DCOOL_JS=$(subst $(SPACE),$(COMMA),$(patsubst src/%,$(DIST_FOLDER)/src/%,$(COOL_JS_BUNDLE))) \
 			$(srcdir)/cool-src.js.m4 > $@)
 endef
 
@@ -733,6 +736,7 @@ pot:
 		src/control/Ruler.js \
 		src/control/Signing.js \
 		src/control/Toolbar.js \
+		src/control/jsdialog/Widget.TreeView.js \
 		src/core/Socket.js \
 		src/errormessages.js \
 		src/layer/tile/CanvasTileLayer.js \
@@ -796,12 +800,10 @@ check-local: $(MOCHA_TS_JS_FILES)
 		exit 1; \
 	fi
 
-SSL_FLAG = `xmllint --xpath 'string(/config/ssl/enable)' $(abs_top_builddir)/coolwsd.xml`
-
 # the delay (in milliseconds) between each emulated key stroke for each view
 typing_speed=100
 # The duration of the typing (in milliseconds)
-typing_duration=30000
+typing_duration=60000
 # By default 6 views are spawned in the document.
 single_view="false"
 # --inspect flag for the first view. Ideally should be used with single_view=true
@@ -816,6 +818,6 @@ perf-test:
 		echo 'Making fresh copy of the perf-test-edit.odt document'; \
 		cp $(abs_top_srcdir)/test/data/perf-test.odt $(abs_top_builddir)/test/data/perf-test-edit.odt; \
 	fi
-	$(NODE) $(abs_srcdir)/test/bootstrap.js $(SSL_FLAG) $(abs_top_builddir) $(abs_srcdir) $(typing_speed) $(single_view) $(typing_duration) $(node_inspect) ${record_stats}
+	$(NODE) $(abs_srcdir)/test/bootstrap.js $(abs_top_builddir) $(abs_srcdir) $(typing_speed) $(single_view) $(typing_duration) $(node_inspect) ${record_stats}
 # for now - unwinding ts and js deps for different targets is a real pain.
 .NOTPARALLEL:

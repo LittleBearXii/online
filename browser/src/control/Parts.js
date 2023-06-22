@@ -315,20 +315,18 @@ L.Map.include({
 		}
 	},
 
-	duplicatePage: function() {
+	duplicatePage: function(pos) {
 		if (!this.isPresentationOrDrawing()) {
 			return;
 		}
-		app.socket.sendMessage('uno .uno:DuplicatePage');
-		var docLayer = this._docLayer;
 
-		// At least for Impress, we should not fire this. It causes a circular reference.
-		if (!this.isPresentationOrDrawing()) {
-			this.fire('insertpage', {
-				selectedPart: docLayer._selectedPart,
-				parts:        docLayer._parts
-			});
+		if (pos === undefined) {
+			app.socket.sendMessage('uno .uno:DuplicatePage');
+		} else {
+			var argument = {InsertPos: {type: 'int16', value: pos}};
+			app.socket.sendMessage('uno .uno:DuplicatePage ' + JSON.stringify(argument));
 		}
+		var docLayer = this._docLayer;
 
 		docLayer._parts++;
 		this.setPart('next');
@@ -435,7 +433,7 @@ L.Map.include({
 				}
 			};
 
-			this.uiManager.showInfoModal('show-sheets-modal', '', ' ', ' ', _('Close'), callback, true);
+			this.uiManager.showInfoModal('show-sheets-modal', '', ' ', ' ', _('Close'), callback, true, 'show-sheets-modal-response');
 			document.getElementById('show-sheets-modal').querySelectorAll('label')[0].outerHTML = container.outerHTML;
 		}
 	},
@@ -445,6 +443,24 @@ L.Map.include({
 			var argument = {nTabNumber: {type: 'int16', value: tabNumber}};
 			app.socket.sendMessage('uno .uno:Hide ' + JSON.stringify(argument));
 		}
+	},
+
+	hideSlide: function(slideNum) {
+		if (slideNum === undefined)
+			slideNum = this.getCurrentPartNumber();
+		L.DomUtil.addClass(this._docLayer._preview._previewTiles[slideNum], 'hidden-slide');
+		this._docLayer._hiddenSlides.add(slideNum);
+		app.socket.sendMessage('uno .uno:HideSlide');
+		this.fire('toggleslidehide');
+	},
+
+	showSlide: function(slideNum) {
+		if (slideNum === undefined)
+			slideNum = this.getCurrentPartNumber();
+		L.DomUtil.removeClass(this._docLayer._preview._previewTiles[slideNum], 'hidden-slide');
+		this._docLayer._hiddenSlides.delete(slideNum);
+		app.socket.sendMessage('uno .uno:ShowSlide');
+		this.fire('toggleslidehide');
 	},
 
 	isHiddenPart: function (part) {

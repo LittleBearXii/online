@@ -9,7 +9,7 @@ m4_define(_YEAR_,m4_esyscmd(date +%Y|tr -d '\n'))
 <!-- saved from url=(0054)http://leafletjs.com/examples/quick-start-example.html -->
 m4_ifelse(IOSAPP,[true],
 <!-- Related to issue #5841: the iOS app sets the base text direction via the "dir" parameter -->
-<html dir="" style="height:100%"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<html dir="" style="height:100%"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8" data-theme="%UI_THEME%">
 ,
 <html %UI_RTL_SETTINGS% style="height:100%"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 )m4_dnl
@@ -316,6 +316,7 @@ m4_ifelse(MOBILEAPP,[true],
             m4_ifelse(MOBILEAPP,[],[<div id="served-by"><span id="served-by-label"></span>&nbsp;<span id="os-info"></span>&nbsp;<wbr><span id="coolwsd-id"></span></div>],[<p></p>])
             <div id="slow-proxy"></div>
             m4_ifelse(DEBUG,[true],[<div id="js-dialog">JSDialogs: <a href="javascript:void(function() { app.socket.sendMessage('uno .uno:WidgetTestDialog') }() )">View widgets</a></div>])
+            <div id="routeToken"></div>
             <p style="margin-inline-end: auto;"><span dir="ltr">Copyright © _YEAR_, VENDOR.</span></p>
           </div>
         </div>
@@ -367,6 +368,7 @@ m4_ifelse(MOBILEAPP,[true],
       window.userInterfaceMode = '%USER_INTERFACE_MODE%';
       window.useIntegrationTheme = '%USE_INTEGRATION_THEME%';
       window.enableMacrosExecution = '%ENABLE_MACROS_EXECUTION%';
+      window.enableAccessibility = '%ENABLE_ACCESSIBILITY%';
       window.outOfFocusTimeoutSecs = %OUT_OF_FOCUS_TIMEOUT_SECS%;
       window.idleTimeoutSecs = %IDLE_TIMEOUT_SECS%;
       window.protocolDebug = %PROTOCOL_DEBUG%;

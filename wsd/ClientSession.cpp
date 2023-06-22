@@ -408,9 +408,11 @@ bool ClientSession::_handleInput(const char *buffer, int length)
                                                           + std::to_string(getpid() + SYNTHETIC_COOL_PID_OFFSET)
                                                           + ",\"tid\":1},\n");
                     }
+                    // Should the first getTokenUInt64()'s return value really
+                    // be ignored?
                     else if ((ph == "S" || ph == "F") &&
-                             getTokenUInt64(tokens[4], "id", id),
-                             getTokenUInt64(tokens[5], "tid", tid))
+                             (static_cast<void>(getTokenUInt64(tokens[4], "id", id)),
+                             getTokenUInt64(tokens[5], "tid", tid)))
                     {
                         COOLWSD::writeTraceEventRecording("{\"name\":\""
                                                           + name
@@ -777,7 +779,7 @@ bool ClientSession::_handleInput(const char *buffer, int length)
     }
     else if (tokens.equals(0, "moveselectedclientparts"))
     {
-        if(!_isTextDocument)
+        if (!_isTextDocument)
         {
             int nPosition;
             if (tokens.size() != 2 ||
@@ -1040,7 +1042,9 @@ bool ClientSession::_handleInput(const char *buffer, int length)
              tokens.equals(0, "rendershapeselection") ||
              tokens.equals(0, "resizewindow") ||
              tokens.equals(0, "removetextcontext") ||
-             tokens.equals(0, "rendersearchresult"))
+             tokens.equals(0, "rendersearchresult") ||
+             tokens.equals(0, "geta11yfocusedparagraph") ||
+             tokens.equals(0, "geta11ycaretposition"))
     {
         if (tokens.equals(0, "key"))
             _keyEvents++;
@@ -1070,6 +1074,10 @@ bool ClientSession::_handleInput(const char *buffer, int length)
         return attemptLock(docBroker);
     }
     else if (tokens.equals(0, "blockingcommandstatus"))
+    {
+        return forwardToChild(std::string(buffer, length), docBroker);
+    }
+    else if (tokens.equals(0, "toggletiledumping"))
     {
         return forwardToChild(std::string(buffer, length), docBroker);
     }
@@ -1184,6 +1192,12 @@ bool ClientSession::loadDocument(const char* /*buffer*/, int /*length*/,
         if (COOLWSD::hasProperty("security.macro_security_level"))
         {
             oss << " macroSecurityLevel=" << COOLWSD::getConfigValue<int>("security.macro_security_level", 1);
+        }
+
+        if (COOLWSD::hasProperty("accessibility.enable"))
+        {
+            oss << " enableAccessibility=" << std::boolalpha
+                << COOLWSD::getConfigValue<bool>("accessibility.enable", false);
         }
 
         if (!getDocOptions().empty())
@@ -1380,7 +1394,8 @@ bool ClientSession::filterMessage(const std::string& message) const
         }
         else if (tokens.equals(0, "uno"))
         {
-            if (tokens.size() > 1 && (tokens.equals(1, ".uno:ExecuteSearch") || tokens.equals(1, ".uno:Signature")))
+            if (tokens.size() > 1 && (tokens.equals(1, ".uno:ExecuteSearch") || tokens.equals(1, ".uno:Signature")
+                 || tokens.equals(1, ".uno:ExportToPDF")))
             {
                 allowed = true;
             }
@@ -2052,6 +2067,18 @@ bool ClientSession::handleKitToClientMessage(const std::shared_ptr<Message>& pay
             handleTileInvalidation(firstLine, docBroker);
             return ret;
         }
+        else if (tokens.equals(0, "statechanged:"))
+        {
+            if (_thumbnailSession)
+            {
+                // fallback in case we setup target at first character in the text document,
+                // or not existing target and we will not enter invalidatecursor second time
+                std::ostringstream renderThumbnailCmd;
+                auto position = getThumbnailPosition();
+                renderThumbnailCmd << "getthumbnail x=" << position.first << " y=" << position.second;
+                docBroker->forwardToChild(client_from_this(), renderThumbnailCmd.str());
+            }
+        }
         else if (tokens.equals(0, "invalidatecursor:"))
         {
             assert(firstLine.size() == payload->size() &&
@@ -2081,6 +2108,8 @@ bool ClientSession::handleKitToClientMessage(const std::shared_ptr<Message>& pay
                     // session used for thumbnailing and target already was set
                     if (_thumbnailSession)
                     {
+                        setThumbnailPosition(std::make_pair(x, y));
+
                         bool cursorAlreadyAtTargetPosition = getThumbnailTarget().empty();
                         if (cursorAlreadyAtTargetPosition)
                         {
@@ -2202,7 +2231,7 @@ void ClientSession::enqueueSendMessage(const std::shared_ptr<Message>& data)
 
     const std::shared_ptr<DocumentBroker> docBroker = _docBroker.lock();
     LOG_CHECK_RET(docBroker && "Null DocumentBroker instance", );
-    docBroker->assertCorrectThread();
+    docBroker->ASSERT_CORRECT_THREAD();
 
     std::unique_ptr<TileDesc> tile;
     if (data->firstTokenMatches("tile:"))
@@ -2288,7 +2317,7 @@ void ClientSession::onDisconnect()
 
     const std::shared_ptr<DocumentBroker> docBroker = getDocumentBroker();
     LOG_CHECK_RET(docBroker && "Null DocumentBroker instance", );
-    docBroker->assertCorrectThread();
+    docBroker->ASSERT_CORRECT_THREAD();
     const std::string docKey = docBroker->getDocKey();
 
     // Keep self alive, so that our own dtor runs only at the end of this function. Without this,

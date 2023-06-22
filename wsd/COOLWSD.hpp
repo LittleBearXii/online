@@ -199,18 +199,18 @@ protected:
 
 private:
     std::string _name;
-    pid_t _pid;
+    std::atomic<pid_t> _pid; //< The process-id, which can be access from different threads.
     std::shared_ptr<WebSocketHandler> _ws;
     std::shared_ptr<Socket> _socket;
 };
 
 #if !MOBILEAPP
 
-class ForKitProcWSHandler : public WebSocketHandler
+class ForKitProcWSHandler final : public WebSocketHandler
 {
 public:
-    ForKitProcWSHandler(const std::weak_ptr<StreamSocket>& socket,
-                        const Poco::Net::HTTPRequest& request)
+    template <typename T>
+    ForKitProcWSHandler(const std::weak_ptr<StreamSocket>& socket, const T& request)
         : WebSocketHandler(socket.lock(), request)
     {
     }
@@ -218,10 +218,11 @@ public:
     virtual void handleMessage(const std::vector<char>& data) override;
 };
 
-class ForKitProcess : public WSProcess
+class ForKitProcess final : public WSProcess
 {
 public:
-    ForKitProcess(int pid, std::shared_ptr<StreamSocket>& socket, const Poco::Net::HTTPRequest &request)
+    template <typename T>
+    ForKitProcess(int pid, std::shared_ptr<StreamSocket>& socket, const T& request)
         : WSProcess("ForKit", pid, socket, std::make_shared<ForKitProcWSHandler>(socket, request))
     {
         socket->setHandler(getWSHandler());
@@ -232,7 +233,7 @@ public:
 
 /// The Server class which is responsible for all
 /// external interactions.
-class COOLWSD : public Poco::Util::ServerApplication
+class COOLWSD final : public Poco::Util::ServerApplication
 {
 public:
     COOLWSD();
@@ -269,6 +270,7 @@ public:
     static std::string TmpFontDir;
     static std::string LOKitVersion;
     static bool EnableTraceEventLogging;
+    static bool EnableAccessibility;
     static FILE *TraceEventFile;
     static void writeTraceEventRecording(const char *data, std::size_t nbytes);
     static void writeTraceEventRecording(const std::string &recording);
@@ -282,8 +284,6 @@ public:
     static bool IsProxyPrefixEnabled;
     static std::atomic<unsigned> NumConnections;
     static std::unique_ptr<TraceFileWriter> TraceDumper;
-    static std::unordered_map<std::string, std::vector<std::string>> QuarantineMap;
-    static std::string QuarantinePath;
 #if !MOBILEAPP
     static std::unique_ptr<ClipboardCache> SavedClipboards;
 #endif

@@ -96,6 +96,12 @@
 	height: 100%;
 }
 
+.auto-color-button {
+	width: 100% !important;
+	padding: 0;
+	margin: auto !important;
+}
+
 #toolbar-wrapper.readonly {
 	display: none;
 }
@@ -237,7 +243,7 @@ body {
 
 #sidebar-dock-wrapper {
 	display: none;
-	background: var(--color-main-background);
+	background: var(--color-background-lighter);
 	position: relative;
 	border-inline-start: 1px solid var(--color-border);
 	overflow: hidden;
@@ -343,8 +349,13 @@ nav.spreadsheet-color-indicator ~ #sidebar-dock-wrapper {
 }
 
 #search-input {
+	width: 200px;
 	height: 22px;
 	background: var(--color-background-lighter);
+}
+#search-input:focus {
+	background-color: var(--color-background);
+	border-color: var(--color-primary) !important;
 }
 #search-input:hover {
 	border: 1px solid var(--color-border-darker) !important;
@@ -482,7 +493,9 @@ nav.spreadsheet-color-indicator ~ #sidebar-dock-wrapper {
 	border-radius: var(--border-radius);
 	width: auto;
 }
-.cool-annotation-content-wrapper:hover, .cool-annotation-redline-content-wrapper:hover {
+
+.cool-annotation:not(.annotation-active) .cool-annotation-content-wrapper:hover, 
+.cool-annotation:not(.annotation-active) .cool-annotation-redline-content-wrapper:hover {
 	background-color: var(--color-background-dark);
 	color: var(--color-text-dark);
 }
@@ -609,6 +622,7 @@ nav.spreadsheet-color-indicator ~ #sidebar-dock-wrapper {
 	font-size: var(--default-font-size);
 	border: 1px solid var(--color-border);
 	background-color: var(--color-background-dark);
+	color: var(--color-main-text);
 	overflow-x: hidden;
 	height: 50px;
 	width: 100%;
@@ -830,13 +844,17 @@ nav.spreadsheet-color-indicator ~ #sidebar-dock-wrapper {
 	z-index: 1105;
 }
 
-.lokdialog_container.ui-dialog.ui-widget-content.jsdialog-container {
-	background: var(--color-background-darker) !important;
+.lokdialog_container.ui-dialog.ui-widget-content.jsdialog-container,
+.lokdialog_container .ui-dialog-titlebar.ui-widget-header {
+	background: var(--color-main-background) !important;
 }
 
 .lokdialog.ui-dialog-content.ui-widget-content {
 	overflow: auto;
-	border-radius: calc(var(--border-radius)/2);
+	border-top-left-radius: 0px;
+	border-top-right-radius: 0px;
+	border-bottom-left-radius: var(--border-radius);
+	border-bottom-right-radius: var(--border-radius);
 }
 
 .lokdialog.ui-dialog-content [Id$='Page'] {

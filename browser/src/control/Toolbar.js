@@ -647,6 +647,8 @@ L.Map.include({
 			content.querySelector('#slow-proxy').innerText = _('"Slow Proxy"');
 
 		var map = this;
+		if (window.indirectSocket)
+			content.querySelector('#routeToken').innerText = 'RouteToken: ' + window.routeToken;
 
 		map.uiManager.showYesNoButton(aboutDialogId + '-box', productName, '', _('OK'), null, null, null, true);
 		var box = document.getElementById(aboutDialogId + '-box');
@@ -940,7 +942,7 @@ L.Map.include({
 					msg = _('Are you sure you want to delete this page?');
 				}
 				map.uiManager.showInfoModal('deleteslide-modal', _('Delete'),
-					msg, '', _('OK'), function () { map.deletePage(); }, true);
+					msg, '', _('OK'), function () { map.deletePage(); }, true, 'deleteslide-modal-response');
 			}
 			break;
 		case 'hyperlinkdialog':

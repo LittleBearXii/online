@@ -404,17 +404,15 @@ void cleanupDocBrokers()
 
     if (count != DocBrokers.size())
     {
-        Log::StreamLogger logger = Log::trace();
-        if (logger.enabled())
-        {
-            logger << "Have " << DocBrokers.size() << " DocBrokers after cleanup.\n";
-            for (auto& pair : DocBrokers)
-            {
-                logger << "DocumentBroker [" << pair.first << "].\n";
-            }
-
-            LOG_END_FLUSH(logger);
-        }
+        LOG_TRC("Have " << DocBrokers.size() << " DocBrokers after cleanup.\n"
+                        <<
+                [&](auto& log)
+                {
+                    for (auto& pair : DocBrokers)
+                    {
+                        log << "DocumentBroker [" << pair.first << "].\n";
+                    }
+                });
 
 #if !MOBILEAPP && ENABLE_DEBUG
         if (COOLWSD::SingleKit && DocBrokers.empty())
@@ -901,6 +899,7 @@ std::string COOLWSD::LOKitVersion;
 std::string COOLWSD::ConfigFile = COOLWSD_CONFIGDIR "/coolwsd.xml";
 std::string COOLWSD::ConfigDir = COOLWSD_CONFIGDIR "/conf.d";
 bool COOLWSD::EnableTraceEventLogging = false;
+bool COOLWSD::EnableAccessibility = false;
 FILE *COOLWSD::TraceEventFile = NULL;
 std::string COOLWSD::LogLevel = "trace";
 std::string COOLWSD::LogLevelStartup = "trace";
@@ -928,8 +927,6 @@ static std::string UnitTestLibrary;
 
 unsigned int COOLWSD::NumPreSpawnedChildren = 0;
 std::unique_ptr<TraceFileWriter> COOLWSD::TraceDumper;
-std::unordered_map<std::string, std::vector<std::string>> COOLWSD::QuarantineMap;
-std::string COOLWSD::QuarantinePath;
 #if !MOBILEAPP
 std::unique_ptr<ClipboardCache> COOLWSD::SavedClipboards;
 #endif
@@ -951,7 +948,7 @@ public:
     // Resets the forkit process object
     void setForKitProcess(const std::weak_ptr<ForKitProcess>& forKitProc)
     {
-        assertCorrectThread();
+        assertCorrectThread(__FILE__, __LINE__);
         _forKitProc = forKitProc;
     }
 
@@ -1137,9 +1134,9 @@ public:
                     const std::shared_ptr<const http::Response> httpResponse =
                         httpSession->syncRequest(request);
 
-                    unsigned int statusCode = httpResponse->statusLine().statusCode();
+                    const http::StatusCode statusCode = httpResponse->statusLine().statusCode();
 
-                    if (statusCode == Poco::Net::HTTPResponse::HTTP_OK)
+                    if (statusCode == http::StatusCode::OK)
                     {
                         _eTagValue = httpResponse->get("ETag");
 
@@ -1167,15 +1164,14 @@ public:
                             LOG_ERR("Could not parse the remote config JSON");
                         }
                     }
-                    else if (statusCode == Poco::Net::HTTPResponse::HTTP_NOT_MODIFIED)
+                    else if (statusCode == http::StatusCode::NotModified)
                     {
                         LOG_DBG("Not modified since last time: " << remoteServerURI.toString());
                         handleUnchangedJSON();
                     }
                     else
                     {
-                        LOG_ERR("Remote config server has response status code: " +
-                                std::to_string(statusCode));
+                        LOG_ERR("Remote config server has response status code: " << statusCode);
                     }
                 }
                 catch (...)
@@ -1331,6 +1327,7 @@ public:
         {
             Poco::JSON::Object::Ptr aliasGroups;
             Poco::JSON::Array::Ptr groups;
+
             try
             {
                 aliasGroups = remoteJson->getObject("storage")->getObject("wopi")->getObject("alias_groups");
@@ -1807,9 +1804,7 @@ private:
         const std::shared_ptr<const http::Response> httpResponse
             = httpSession->syncRequest(request);
 
-        const unsigned int statusCode = httpResponse->statusLine().statusCode();
-
-        if (statusCode == Poco::Net::HTTPResponse::HTTP_NOT_MODIFIED)
+        if (httpResponse->statusLine().statusCode() == http::StatusCode::NotModified)
         {
             LOG_DBG("Not modified since last time: " << uri);
             return true;
@@ -1834,9 +1829,7 @@ private:
         const std::shared_ptr<const http::Response> httpResponse
             = httpSession->syncRequest(request);
 
-        const unsigned int statusCode = httpResponse->statusLine().statusCode();
-
-        if (statusCode == Poco::Net::HTTPResponse::HTTP_NOT_MODIFIED)
+        if (httpResponse->statusLine().statusCode() == http::StatusCode::NotModified)
         {
             LOG_DBG("Not modified since last time: " << uri);
             return true;
@@ -1851,9 +1844,7 @@ private:
 
     bool finishDownload(const std::string& uri, const std::shared_ptr<const http::Response> httpResponse)
     {
-        const unsigned int statusCode = httpResponse->statusLine().statusCode();
-
-        if (statusCode != Poco::Net::HTTPResponse::HTTP_OK)
+        if (httpResponse->statusLine().statusCode() != http::StatusCode::OK)
         {
             LOG_WRN("Could not fetch " << uri);
             return false;
@@ -1935,11 +1926,6 @@ void COOLWSD::innerInitialize(Application& self)
 
     Util::setApplicationPath(Poco::Path(Application::instance().commandPath()).parent().toString());
 
-    if (!UnitWSD::init(UnitWSD::UnitType::Wsd, UnitTestLibrary))
-    {
-        throw std::runtime_error("Failed to load wsd unit test library.");
-    }
-
     StartTime = std::chrono::steady_clock::now();
 
     LayeredConfiguration& conf = config();
@@ -1953,6 +1939,7 @@ void COOLWSD::innerInitialize(Application& self)
     // 3) the default parameter of getConfigValue() call. That is used when the
     //    setting is present in coolwsd.xml, but empty (i.e. use the default).
     static const std::map<std::string, std::string> DefAppConfig = {
+        { "accessibility.enable", "false"},
         { "allowed_languages", "de_DE en_GB en_US es_ES fr_FR it nl pt_BR pt_PT ru" },
         { "admin_console.enable_pam", "false" },
         { "child_root_path", "jails" },
@@ -1993,6 +1980,8 @@ void COOLWSD::innerInitialize(Application& self)
         { "net.proto", "all" },
         { "net.service_root", "" },
         { "net.proxy_prefix", "false" },
+        { "net.content_security_policy", "" },
+        { "net.frame_ancestors", "" },
         { "num_prespawn_children", "1" },
         { "per_document.always_save_on_exit", "false" },
         { "per_document.autosave_duration_secs", "300" },
@@ -2090,7 +2079,11 @@ void COOLWSD::innerInitialize(Application& self)
         { "deepl.auth_key", "" },
         { "deepl.enabled", "false" },
         { "zotero.enable", "true" },
-        { "indirection_endpoint.url", "" }
+        { "indirection_endpoint.url", "" },
+#if !MOBILEAPP
+        { "help_url", HELP_URL },
+#endif
+        { "product_name", APP_NAME }
     };
 
     // Set default values, in case they are missing from the config file.
@@ -2126,11 +2119,15 @@ void COOLWSD::innerInitialize(Application& self)
     AutoPtr<AppConfigMap> overrideConfig(new AppConfigMap(_overrideSettings));
     conf.addWriteable(overrideConfig, PRIO_APPLICATION); // Highest priority
 
-    // Allow UT to manipulate before using configuration values.
-    UnitWSD::get().configure(config());
+    if (!UnitTestLibrary.empty())
+    {
+        UnitWSD::defaultConfigure(conf);
+    }
 
     // Experimental features.
     EnableExperimental = getConfigValue<bool>(conf, "experimental_features", false);
+
+    EnableAccessibility = getConfigValue<bool>(conf, "accessibility.enable", false);
 
     // Setup user interface mode
     UserInterface = getConfigValue<std::string>(conf, "user_interface.mode", "default");
@@ -2139,6 +2136,9 @@ void COOLWSD::innerInitialize(Application& self)
         UserInterface = "classic";
 
     if (UserInterface == "tabbed")
+        UserInterface = "notebookbar";
+
+    if (EnableAccessibility)
         UserInterface = "notebookbar";
 
     // Set the log-level after complete initialization to force maximum details at startup.
@@ -2200,6 +2200,22 @@ void COOLWSD::innerInitialize(Application& self)
                 << LogLevel << "] until after WSD initialization.");
     }
 
+    // First log entry.
+    ServerName = config().getString("server_name");
+    LOG_INF("Initializing coolwsd server [" << ServerName << "]. Experimental features are "
+                                            << (EnableExperimental ? "enabled." : "disabled."));
+
+
+    // Initialize the UnitTest subsystem.
+    if (!UnitWSD::init(UnitWSD::UnitType::Wsd, UnitTestLibrary))
+    {
+        throw std::runtime_error("Failed to load wsd unit test library.");
+    }
+
+    // Allow UT to manipulate before using configuration values.
+    UnitWSD::get().configure(conf);
+
+    // Trace Event Logging.
     EnableTraceEventLogging = getConfigValue<bool>(conf, "trace_event[@enable]", false);
 
     if (EnableTraceEventLogging)
@@ -2225,10 +2241,6 @@ void COOLWSD::innerInitialize(Application& self)
             }
         }
     }
-
-    ServerName = config().getString("server_name");
-    LOG_INF("Initializing coolwsd server [" << ServerName << "]. Experimental features are "
-                                            << (EnableExperimental ? "enabled." : "disabled."));
 
     // Check deprecated settings.
     bool reuseCookies = false;
@@ -2453,17 +2465,39 @@ void COOLWSD::innerInitialize(Application& self)
     LOG_DBG("FileServerRoot after config: " << FileServerRoot);
 
     //creating quarantine directory
-    if(getConfigValue<bool>(conf, "quarantine_files[@enable]", false))
+    if (getConfigValue<bool>(conf, "quarantine_files[@enable]", false))
     {
-        QuarantinePath = getPathFromConfig("quarantine_files.path");
-        if (QuarantinePath[QuarantinePath.size() - 1] != '/')
-            QuarantinePath += '/';
+        std::string path = Util::trimmed(getPathFromConfig("quarantine_files.path"));
+        if (path.empty())
+        {
+            LOG_WRN("Quarantining is enabled via quarantine_files config, but no path is set in "
+                    "quarantine_files.path. Disabling quarantine");
+        }
+        else
+        {
+            if (path[path.size() - 1] != '/')
+                path += '/';
 
-        Poco::File p(QuarantinePath);
-        p.createDirectories();
-        LOG_INF("Created quarantine directory " + p.path());
+            Poco::File p(path);
+            try
+            {
+                LOG_TRC("Creating quarantine directory [" + path << ']');
+                p.createDirectories();
 
-        Quarantine::createQuarantineMap();
+                LOG_DBG("Created quarantine directory [" + path << ']');
+            }
+            catch (const std::exception& ex)
+            {
+                LOG_WRN("Failed to create quarantine directory [" << path
+                                                                  << "]. Disabling quaratine");
+            }
+
+            if (FileUtil::Stat(path).exists())
+            {
+                LOG_INF("Initializing quarantine at [" + path << ']');
+                Quarantine::initialize(path);
+            }
+        }
     }
 
     NumPreSpawnedChildren = getConfigValue<int>(conf, "num_prespawn_children", 1);
@@ -2555,6 +2589,15 @@ void COOLWSD::innerInitialize(Application& self)
     const std::string authKey = getConfigValue<std::string>(conf, "deepl.auth_key", "");
     setenv("DEEPL_API_URL", apiURL.c_str(), 1);
     setenv("DEEPL_AUTH_KEY", authKey.c_str(), 1);
+
+#if !MOBILEAPP
+    const std::string helpUrl = getConfigValue<std::string>(conf, "help_url", HELP_URL);
+    setenv("LOK_HELP_URL", helpUrl.c_str(), 1);
+#else
+    // On mobile UI there should be no tunnelled dialogs. But if there are some, by mistake,
+    // at least they should not have a non-working Help button.
+    setenv("LOK_HELP_URL", "", 1);
+#endif
 
 #if ENABLE_SUPPORT_KEY
     const std::string supportKeyString = getConfigValue<std::string>(conf, "support_key", "");
@@ -3353,7 +3396,7 @@ static std::shared_ptr<DocumentBroker>
 }
 
 /// Handles the socket that the prisoner kit connected to WSD on.
-class PrisonerRequestDispatcher : public WebSocketHandler
+class PrisonerRequestDispatcher final : public WebSocketHandler
 {
     std::weak_ptr<ChildProcess> _childProcess;
     int _pid; //< The Kit's PID (for logging).
@@ -3436,31 +3479,61 @@ private:
         std::shared_ptr<StreamSocket> socket = getSocket().lock();
         if (!socket)
         {
-            LOG_ERR("Invalid socket while reading incoming message.");
+            LOG_ERR("Invalid socket while reading incoming message");
             return;
         }
 
-        Poco::MemoryInputStream message(&socket->getInBuffer()[0],
-                                        socket->getInBuffer().size());
-        Poco::Net::HTTPRequest request;
+        Buffer& data = socket->getInBuffer();
+        if (data.empty())
+        {
+            LOG_DBG("No data to process from the socket");
+            return;
+        }
+
+#ifdef LOG_SOCKET_DATA
+        LOG_TRC("HandleIncomingMessage: buffer has:\n"
+                << Util::dumpHex(std::string(data.data(), std::min(data.size(), 256UL))));
+#endif
+
+        // Consume the incoming data by parsing and processing the body.
+        http::Request request;
+#if !MOBILEAPP
+        const int64_t read = request.readData(data.data(), data.size());
+        if (read < 0)
+        {
+            LOG_ERR("Error parsing prisoner socket data");
+            return;
+        }
+
+        if (read == 0)
+        {
+            // Not enough data.
+            return;
+        }
+
+        assert(read > 0 && "Must have read some data!");
+
+        // Remove consumed data.
+        data.eraseFirst(read);
+#endif
 
         try
         {
 #if !MOBILEAPP
-            if (!socket->parseHeader("Prisoner", message, request))
-                return;
-
-            LOG_TRC("Child connection with URI [" << COOLWSD::anonymizeUrl(request.getURI()) << "].");
-            Poco::URI requestURI(request.getURI());
+            LOG_TRC("Child connection with URI [" << COOLWSD::anonymizeUrl(request.getUrl())
+                                                  << ']');
+            Poco::URI requestURI(request.getUrl());
 #ifndef KIT_IN_PROCESS
             if (requestURI.getPath() == FORKIT_URI)
             {
                 if (socket->getPid() != COOLWSD::ForKitProcId)
                 {
-                    LOG_WRN("Connection request received on " << FORKIT_URI << " endpoint from unexpected ForKit process. Skipped.");
+                    LOG_WRN("Connection request received on "
+                            << FORKIT_URI << " endpoint from unexpected ForKit process. Skipped");
                     return;
                 }
                 COOLWSD::ForKitProc = std::make_shared<ForKitProcess>(COOLWSD::ForKitProcId, socket, request);
+                LOG_ASSERT_MSG(socket->getInBuffer().empty(), "Unexpected data in prisoner socket");
                 socket->getInBuffer().clear();
                 PrisonerPoll->setForKitProcess(COOLWSD::ForKitProc);
                 return;
@@ -3491,19 +3564,22 @@ private:
 
             if (pid <= 0)
             {
-                LOG_ERR("Invalid PID in child URI [" << COOLWSD::anonymizeUrl(request.getURI()) << "].");
+                LOG_ERR("Invalid PID in child URI [" << COOLWSD::anonymizeUrl(request.getUrl())
+                                                     << ']');
                 return;
             }
 
             if (jailId.empty())
             {
-                LOG_ERR("Invalid JailId in child URI [" << COOLWSD::anonymizeUrl(request.getURI()) << "].");
+                LOG_ERR("Invalid JailId in child URI [" << COOLWSD::anonymizeUrl(request.getUrl())
+                                                        << ']');
                 return;
             }
 
+            LOG_ASSERT_MSG(socket->getInBuffer().empty(), "Unexpected data in prisoner socket");
             socket->getInBuffer().clear();
 
-            LOG_INF("New child [" << pid << "], jailId: " << jailId << '.');
+            LOG_INF("New child [" << pid << "], jailId: " << jailId);
 
             UnitWSD::get().newChild(*this);
 #else
@@ -3533,7 +3609,7 @@ private:
         catch (const std::bad_weak_ptr&)
         {
             // Using shared_from_this() from a constructor is not good.
-            assert(false);
+            assert(!"Got std::bad_weak_ptr. Are we using shared_from_this() from a constructor?");
         }
         catch (const std::exception& exc)
         {
@@ -3545,7 +3621,7 @@ private:
     /// Prisoner websocket fun ... (for now)
     virtual void handleMessage(const std::vector<char> &data) override
     {
-        if (UnitWSD::get().filterChildMessage(data))
+        if (UnitWSD::isUnitTesting() && UnitWSD::get().filterChildMessage(data))
             return;
 
         auto message = std::make_shared<Message>(data.data(), data.size(), Message::Dir::Out);
@@ -3678,7 +3754,7 @@ public:
         std::string hostToCheck = request.getHost();
         bool allow = allowPostFrom(addressToCheck) || HostUtil::allowedWopiHost(hostToCheck);
 
-        if(!allow)
+        if (!allow)
         {
             LOG_WRN_S("convert-to: Requesting address is denied: " << addressToCheck);
             return false;
@@ -3689,7 +3765,7 @@ public:
         }
 
         // Handle forwarded header and make sure all participating IPs are allowed
-        if(request.has("X-Forwarded-For"))
+        if (request.has("X-Forwarded-For"))
         {
             const std::string fowardedData = request.get("X-Forwarded-For");
             StringVector tokens = StringVector::tokenize(fowardedData, ',');
@@ -3712,7 +3788,7 @@ public:
                     // We can't find out the hostname, and it already failed the IP check
                     allow = false;
                 }
-                if(!allow)
+                if (!allow)
                 {
                     LOG_WRN_S("convert-to: Requesting address is denied: " << addressToCheck);
                     return false;
@@ -3798,7 +3874,7 @@ private:
             }
 
             // Routing
-            if (UnitWSD::get().handleHttpRequest(request, message, socket))
+            if (UnitWSD::isUnitTesting() && UnitWSD::get().handleHttpRequest(request, message, socket))
             {
                 // Unit testing, nothing to do here
             }
@@ -4888,7 +4964,8 @@ private:
                 }
             }
 
-            LOG_INF("URL [" << COOLWSD::anonymizeUrl(url) << "] is " << (isReadOnly ? "readonly" : "writable") << '.');
+            LOG_INF("URL [" << COOLWSD::anonymizeUrl(url) << "] is "
+                            << (isReadOnly ? "readonly" : "writable"));
 
             // Request a kit process for this doc.
             std::shared_ptr<DocumentBroker> docBroker = findOrCreateDocBroker(
@@ -5102,7 +5179,7 @@ private:
         capabilities->set("hasMobileSupport", true);
 
         // Set the product name
-        capabilities->set("productName", APP_NAME);
+        capabilities->set("productName", config::getString("product_name", APP_NAME));
 
         // Set the Server ID
         capabilities->set("serverId", Util::getProcessIdentifier());
@@ -5446,7 +5523,7 @@ void COOLWSD::processFetchUpdate()
             return; // No url, nothing to do.
 
         Poco::URI uriFetch(url);
-        uriFetch.addQueryParameter("product", APP_NAME);
+        uriFetch.addQueryParameter("product", config::getString("product_name", APP_NAME));
         uriFetch.addQueryParameter("version", COOLWSD_VERSION);
         LOG_TRC("Infobar update request from " << uriFetch.toString());
         std::shared_ptr<http::Session> sessionFetch = StorageBase::getHttpSession(uriFetch);
@@ -5458,7 +5535,7 @@ void COOLWSD::processFetchUpdate()
 
         const std::shared_ptr<const http::Response> httpResponse =
             sessionFetch->syncRequest(request);
-        if (httpResponse->statusLine().statusCode() == Poco::Net::HTTPResponse::HTTP_OK)
+        if (httpResponse->statusLine().statusCode() == http::StatusCode::OK)
         {
             LOG_DBG("Infobar update returned: " << httpResponse->getBody());
 

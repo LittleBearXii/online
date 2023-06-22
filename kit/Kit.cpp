@@ -352,7 +352,7 @@ namespace
             if (errno == ENOENT)
             {
                 File(Path(linkableCopy).parent()).createDirectories();
-                if (!FileUtil::copy(fpath, linkableCopy.c_str(), /*log=*/false, /*throw_on_error=*/false))
+                if (!FileUtil::copy(fpath, linkableCopy, /*log=*/false, /*throw_on_error=*/false))
                     LOG_TRC("Failed to create linkable copy [" << fpath << "] to [" << linkableCopy.c_str() << "]");
                 else {
                     // Match system permissions, so a file we can write is not shared across jails.
@@ -487,9 +487,7 @@ namespace
         return FTW_CONTINUE;
     }
 
-    void linkOrCopy(std::string source,
-                    const Poco::Path& destination,
-                    std::string linkable,
+    void linkOrCopy(std::string source, const Poco::Path& destination, const std::string& linkable,
                     LinkOrCopyType type)
     {
         std::string resolved = FileUtil::realpath(source);
@@ -928,7 +926,7 @@ public:
 
         if (!RenderTiles::doRender(_loKitDocument, _deltaGen, tileCombined, _pngPool,
                                    combined, blenderFunc, postMessageFunc, _mobileAppDocId,
-                                   session->getCanonicalViewId()))
+                                   session->getCanonicalViewId(), session->getDumpTiles()))
         {
             LOG_DBG("All tiles skipped, not producing empty tilecombine: message");
             return;
@@ -969,7 +967,7 @@ public:
     {
         LOG_TRC("Should we trim our caches ?");
         // FIXME: multi-document mobile optimization ?
-        for (auto it : _sessions)
+        for (const auto& it : _sessions)
         {
             if (it.second->isActive())
             {
@@ -1501,6 +1499,7 @@ private:
         const std::string& batchMode = session->getBatchMode();
         const std::string& enableMacrosExecution = session->getEnableMacrosExecution();
         const std::string& macroSecurityLevel = session->getMacroSecurityLevel();
+        const bool enableAccessibility = session->getEnableAccessibility();
         const std::string& userTimezone = session->getTimezone();
 
 #if !MOBILEAPP
@@ -1648,6 +1647,7 @@ private:
 
         _loKitDocument->setViewLanguage(viewId, lang.c_str());
         _loKitDocument->setViewTimezone(viewId, userTimezone.c_str());
+        _loKitDocument->setAccessibilityState(viewId, enableAccessibility);
 
         // viewId's monotonically increase, and CallbackDescriptors are never freed.
         _viewIdToCallbackDescr.emplace(viewId,
@@ -2436,24 +2436,21 @@ protected:
             return;
 #endif
         StringVector tokens = StringVector::tokenize(message);
-        Log::StreamLogger logger = Log::debug();
-        if (logger.enabled())
-        {
-            logger << _socketName << ": recv [";
-            for (const auto& token : tokens)
-            {
-                // Don't log user-data, there are anonymized versions that get logged instead.
-                if (tokens.startsWith(token, "jail") ||
-                    tokens.startsWith(token, "author") ||
-                    tokens.startsWith(token, "name") ||
-                    tokens.startsWith(token, "url"))
-                    continue;
 
-                logger << tokens.getParam(token) << ' ';
-            }
+        LOG_DBG(_socketName << ": recv [" <<
+                [&](auto& log)
+                {
+                    for (const auto& token : tokens)
+                    {
+                        // Don't log user-data, there are anonymized versions that get logged instead.
+                        if (tokens.startsWith(token, "jail") ||
+                            tokens.startsWith(token, "author") ||
+                            tokens.startsWith(token, "name") || tokens.startsWith(token, "url"))
+                            continue;
 
-            LOG_END_FLUSH(logger);
-        }
+                        log << tokens.getParam(token) << ' ';
+                    }
+                });
 
         // Note: Syntax or parsing errors here are unexpected and fatal.
         if (SigUtil::getTerminationFlag())

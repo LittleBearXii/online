@@ -150,9 +150,6 @@ L.Map = L.Evented.extend({
 
 		this._progressBar = L.progressOverlay(new L.point(150, 25));
 
-		this._textInput = L.textInput();
-		this.addLayer(this._textInput);
-
 		// When all these conditions are met, fire statusindicator:initializationcomplete
 		this.initConditions = {
 			'doclayerinit': false,
@@ -308,6 +305,12 @@ L.Map = L.Evented.extend({
 				this._docLoadedOnce = this._docLoaded;
 			}
 		}, this);
+	},
+
+	initTextInput: function(docType) {
+		var hasAccessibilitySupport = window.enableAccessibility  === 'true';
+		this._textInput = hasAccessibilitySupport && docType === 'text' ? L.a11yTextInput() : L.textInput();
+		this.addLayer(this._textInput);
 	},
 
 	loadDocument: function(socket) {
@@ -1119,7 +1122,8 @@ L.Map = L.Evented.extend({
 	// @acceptInput (only on "mobile" (= mobile phone) or on iOS and Android in general) true if we want to
 	// accept key input, and show the virtual keyboard.
 	focus: function (acceptInput) {
-		this._textInput.focus(acceptInput);
+		if (this._textInput)
+			this._textInput.focus(acceptInput);
 	},
 
 	// just set the keyboard state for mobile
@@ -1136,7 +1140,7 @@ L.Map = L.Evented.extend({
 	},
 
 	hasFocus: function () {
-		return document.activeElement === this._textInput.activeElement();
+		return this._textInput && document.activeElement === this._textInput.activeElement();
 	},
 
 	// Returns true iff the textarea is enabled and we focused on it.

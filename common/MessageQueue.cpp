@@ -26,6 +26,11 @@ void TileQueue::put_impl(const Payload& value)
 
     if (firstToken == "canceltiles")
     {
+        // #6514 given that all messages that can have "ver=" in them will
+        // also have "nviewid=", "oldwid=" and "wid=" then "id=" is always
+        // hit and this loop doesn't achieve anything, disable this for
+        // now and either drop canceltiles or repair it to do something
+#if 0
         const std::string msg = std::string(value.data(), value.size());
         LOG_TRC("Processing [" << COOLProtocol::getAbbreviatedMessage(msg)
                                << "]. Before canceltiles have " << getQueue().size()
@@ -54,6 +59,7 @@ void TileQueue::put_impl(const Payload& value)
 
         // Don't push canceltiles into the queue.
         LOG_TRC("After canceltiles have " << getQueue().size() << " in queue.");
+#endif
         return;
     }
     else if (firstToken == "tilecombine")
@@ -152,6 +158,18 @@ std::string extractUnoCommand(const std::string& command)
     return command;
 }
 
+bool containsUnoCommand(const std::string_view token, const std::string_view command)
+{
+    if (!COOLProtocol::matchPrefix(".uno:", token))
+        return false;
+
+    size_t equalPos = token.find('=');
+    if (equalPos != std::string::npos)
+        return token.substr(0, equalPos) == command;
+
+    return token == command;
+}
+
 /// Extract rectangle from the invalidation callback
 bool extractRectangle(const StringVector& tokens, int& x, int& y, int& w, int& h, int& part, int& mode)
 {
@@ -185,6 +203,51 @@ bool extractRectangle(const StringVector& tokens, int& x, int& y, int& w, int& h
 
     return true;
 }
+
+class isDuplicateCommand
+{
+private:
+    const std::string& m_unoCommand;
+    const StringVector& m_tokens;
+    bool m_is_duplicate_command;
+public:
+    isDuplicateCommand(const std::string& unoCommand, const StringVector& tokens)
+        : m_unoCommand(unoCommand)
+        , m_tokens(tokens)
+        , m_is_duplicate_command(false)
+    {
+    }
+
+    bool get_is_duplicate_command() const
+    {
+        return m_is_duplicate_command;
+    }
+
+    void reset()
+    {
+        m_is_duplicate_command = false;
+    }
+
+    bool operator()(size_t nIndex, std::string_view token)
+    {
+        switch (nIndex)
+        {
+            case 0:
+            case 1:
+            case 2:
+                // returns true to end tokenization as one of first 3 token doesn't match
+                return token != m_tokens[nIndex];
+            case 3:
+                // callback, the same target, state changed; now check it's
+                // the same .uno: command
+                m_is_duplicate_command = containsUnoCommand(token, m_unoCommand);
+                // returns true to end tokenization as 4 is all we need
+                return true;
+            break;
+        }
+        return false;
+    };
+};
 
 }
 
@@ -343,26 +406,18 @@ std::string TileQueue::removeCallbackDuplicate(const std::string& callbackMsg)
             if (unoCommand == ".uno:ModifiedStatus")
                 return std::string();
 
+            if (getQueue().empty())
+                return std::string();
+
             // remove obsolete states of the same .uno: command
+            isDuplicateCommand functor(unoCommand, tokens);
             for (std::size_t i = 0; i < getQueue().size(); ++i)
             {
                 auto& it = getQueue()[i];
 
-                StringVector queuedTokens = StringVector::tokenize(it.data(), it.size());
-                if (queuedTokens.size() < 4)
-                    continue;
+                StringVector::tokenize_foreach(functor, it.data(), it.size());
 
-                if (queuedTokens[0] != tokens[0] || queuedTokens[1] != tokens[1]
-                    || queuedTokens[2] != tokens[2])
-                    continue;
-
-                // callback, the same target, state changed; now check it's
-                // the same .uno: command
-                std::string queuedUnoCommand = extractUnoCommand(queuedTokens[3]);
-                if (queuedUnoCommand.empty())
-                    continue;
-
-                if (unoCommand == queuedUnoCommand)
+                if (functor.get_is_duplicate_command())
                 {
                     LOG_TRC("Remove obsolete uno command: "
                             << std::string(it.data(), it.size()) << " -> "
@@ -370,6 +425,7 @@ std::string TileQueue::removeCallbackDuplicate(const std::string& callbackMsg)
                     getQueue().erase(getQueue().begin() + i);
                     break;
                 }
+                functor.reset();
             }
         }
         break;

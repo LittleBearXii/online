@@ -8,6 +8,7 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Scroll through document', 
 
 	beforeEach(function() {
 		helper.beforeAll(testFileName, 'writer');
+		desktopHelper.switchUIToCompact();
 
 		cy.cGet('#toolbar-up .w2ui-scroll-right').click();
 		cy.cGet('#tb_editbar_item_sidebar').click();
@@ -37,7 +38,7 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Scroll through document', 
 		cy.cGet('#StatePageNumber').should('have.text', 'Page 1 of 4');
 	});
 
-	it.skip('Scrolling to left/right', function() {
+	it('Scrolling to left/right', function() {
 		cy.cGet('#toolbar-down').click();
 		desktopHelper.selectZoomLevel('200');
 		//show horizontal scrollbar

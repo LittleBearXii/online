@@ -19,7 +19,7 @@ button.jsdialog img {
 }
 
 .button-secondary,
-button:not(.ui-tab):not(.ui-corner-all):not(.button-primary):not(.unobutton) {
+button:not(.ui-tab):not(.ui-corner-all):not(.button-primary):not(.unobutton):not(.form-field-button) {
 	box-sizing: border-box;
 	height: 32px;
 	line-height: 0em;
@@ -32,6 +32,7 @@ button:not(.ui-tab):not(.ui-corner-all):not(.button-primary):not(.unobutton) {
 	border-radius: var(--border-radius);
 	margin: 5px;
 	vertical-align: middle;
+	width: max-content;
 }
 
 .button-primary {
@@ -44,6 +45,7 @@ button:not(.ui-tab):not(.ui-corner-all):not(.button-primary):not(.unobutton) {
 	border-radius: var(--border-radius);
 	margin: 5px;
 	vertical-align: middle;
+	width: max-content;
 }
 
 .jsdialog.ui-button-box.end {
@@ -75,25 +77,23 @@ button:not(.ui-tab):not(.ui-corner-all):not(.button-primary):not(.unobutton) {
 
 /* button box */
 
-/* - Add fallback for browsers without support
-for float logical values */
-html:not([dir='rtl']) .jsdialog.ui-button-box-right,
-html[dir='rtl'] .jsdialog.ui-button-box-left {
-	float: right;
+.jsdialog.ui-button-box {
+	display: grid;
 }
-html[dir='rtl'] .jsdialog.ui-button-box-right,
-html:not([dir='rtl']) .jsdialog.ui-button-box-left {
-	float: left;
-}
-/* - */
 
 .jsdialog.ui-button-box-right {
 	display: flex;
-	float: inline-end;
+	justify-self: end;
 	margin-inline-end: -5px;
 }
 
 .jsdialog.ui-button-box-left {
-	float: inline-start;
+	display: flex;
+	justify-self: start;
 	margin-inline-start: -5px;
+}
+
+/* Eg: Sidebar -> Animation -> Effects buttons shouldn't overflow the content */
+button.has-img {
+	min-width: auto !important;
 }

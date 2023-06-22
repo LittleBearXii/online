@@ -29,8 +29,13 @@ L.Control.NotebookbarDraw = L.Control.NotebookbarImpress.extend({
 		return this.buildOptionsSectionData([
 			{
 				'type': 'toolitem',
-				'text': _('Page layout'),
-				'command': '.uno:ModifyPage'
+				'text': _UNO('.uno:ModifyPage', 'drawing', true),
+				'command': '.uno:SidebarDeck.PropertyDeck'
+			},
+			{
+				'type': 'toolitem',
+				'text': _UNO('.uno:Navigator'),
+				'command': '.uno:Navigator'
 			},
 			{
 				'type': 'toolitem',
@@ -303,7 +308,12 @@ L.Control.NotebookbarDraw = L.Control.NotebookbarImpress.extend({
 			{
 				'type': 'bigtoolitem',
 				'text': _UNO('.uno:Sidebar'),
-				'command': '.uno:Sidebar'
+				'command': '.uno:SidebarDeck.PropertyDeck'
+			},
+			{
+				'type': 'bigtoolitem',
+				'text': _UNO('.uno:Navigator'),
+				'command': '.uno:Navigator'
 			}
 		];
 
@@ -767,8 +777,8 @@ L.Control.NotebookbarDraw = L.Control.NotebookbarImpress.extend({
 			},
 			{
 				'type': 'bigtoolitem',
-				'text': _('Page layout'),
-				'command': '.uno:ModifyPage'
+				'text': _UNO('.uno:ModifyPage', 'drawing', true),
+				'command': '.uno:SidebarDeck.PropertyDeck'
 			},
 			{
 				'type': 'bigtoolitem',
@@ -956,13 +966,13 @@ L.Control.NotebookbarDraw = L.Control.NotebookbarImpress.extend({
 							},
 							{
 								'type': 'toolitem',
-								'text': _UNO('.uno:InsertSlideField', 'presentation'),
-								'command': '.uno:InsertSlideField'
+								'text': _UNO('.uno:InsertPageField', 'presentation'),
+								'command': '.uno:InsertPageField'
 							},
 							{
 								'type': 'toolitem',
-								'text': _UNO('.uno:InsertSlidesField', 'presentation'),
-								'command': '.uno:InsertSlidesField'
+								'text': _UNO('.uno:InsertPagesField', 'presentation'),
+								'command': '.uno:InsertPagesField'
 							}
 						]
 					},
@@ -981,8 +991,8 @@ L.Control.NotebookbarDraw = L.Control.NotebookbarImpress.extend({
 							},
 							{
 								'type': 'toolitem',
-								'text': _UNO('.uno:InsertSlideTitleField', 'presentation'),
-								'command': '.uno:InsertSlideTitleField'
+								'text': _UNO('.uno:InsertPageTitleField', 'presentation'),
+								'command': '.uno:InsertPageTitleField'
 							}
 						]
 					}

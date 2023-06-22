@@ -272,8 +272,8 @@ L.Clipboard = L.Class.extend({
 				that._doAsyncDownload(
 					'POST', dest, formData, false,
 					function() {
-						if (this.isPasteSpecialDialogOpen()) {
-							this._map.jsdialog.closeDialog(this.pasteSpecialDialogId, false);
+						if (that.isPasteSpecialDialogOpen()) {
+							that._map.jsdialog.closeDialog(that.pasteSpecialDialogId, false);
 							window.app.console.log('up-load done, now paste special');
 							app.socket.sendMessage('uno .uno:PasteSpecial');
 						} else {
@@ -281,10 +281,10 @@ L.Clipboard = L.Class.extend({
 							app.socket.sendMessage('uno .uno:Paste');
 						}
 
-					},
+					}.bind(this),
 					function(progress) { return 50 + progress/2; }
 				);
-			},
+			}.bind(this),
 			function(progress) { return progress/2; },
 			function() {
 				window.app.console.log('failed to download clipboard using fallback html');
@@ -302,8 +302,8 @@ L.Clipboard = L.Class.extend({
 				that._doAsyncDownload(
 					'POST', dest, formData, false,
 					function() {
-						if (this.isPasteSpecialDialogOpen()) {
-							this._map.jsdialog.closeDialog(this.pasteSpecialDialogId, false);
+						if (that.isPasteSpecialDialogOpen()) {
+							that._map.jsdialog.closeDialog(that.pasteSpecialDialogId, false);
 							window.app.console.log('up-load of fallback done, now paste special');
 							app.socket.sendMessage('uno .uno:PasteSpecial');
 						} else {
@@ -311,7 +311,7 @@ L.Clipboard = L.Class.extend({
 							app.socket.sendMessage('uno .uno:Paste');
 						}
 
-					},
+					}.bind(this),
 					function(progress) { return 50 + progress/2; },
 					function() {
 						that.dataTransferToDocumentFallback(null, fallbackHtml);
@@ -699,6 +699,12 @@ L.Clipboard = L.Class.extend({
 		}
 
 		app.socket.sendMessage('uno .uno:' + unoName);
+		if (ev.clipboardData && unoName === 'Cut') {
+			// Cut text is not removed from the editable area,
+			// so we need to request the focused paragraph.
+			this._map._textInput._abortComposition(ev);
+		}
+
 		if (preventDefault) {
 			ev.preventDefault();
 			return false;
@@ -900,7 +906,12 @@ L.Clipboard = L.Class.extend({
 	},
 
 	isPasteSpecialDialogOpen: function() {
-		return document.getElementById('paste_special_dialog') ? true: false;
+		if (!this.pasteSpecialDialogId)
+			return false;
+		else {
+			var result = document.getElementById(this.pasteSpecialDialogId);
+			return result !== undefined && result !== null ? true: false;
+		}
 	},
 
 	_openPasteSpecialPopup: function () {
@@ -908,7 +919,7 @@ L.Clipboard = L.Class.extend({
 		msg = L.Util.replaceCtrlAltInMac(msg);
 
 		// We will use this for closing the dialog.
-		this.pasteSpecialDialogId = this._map.uiManager.generateModalId('paste_special_dialog');
+		this.pasteSpecialDialogId = this._map.uiManager.generateModalId('paste_special_dialog') + '-box';
 
 		var id = 'paste_special_dialog';
 		this._map.uiManager.showYesNoButton(id + '-box', '', '', _('OK'), null, null, null, true);

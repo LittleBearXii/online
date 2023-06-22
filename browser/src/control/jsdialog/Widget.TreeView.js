@@ -33,7 +33,9 @@
  * SPDX-License-Identifier: MPL-2.0
  */
 
-/* global $ JSDialog */
+/* global $ _ JSDialog */
+
+var treeType = '';
 
 function _createCheckbox(parentContainer, treeViewData, builder, entry) {
 	var checkbox = L.DomUtil.create('input', builder.options.cssClass + ' ui-treeview-checkbox', parentContainer);
@@ -112,7 +114,7 @@ function _treelistboxEntry(parentContainer, treeViewData, entry, builder, isTree
 	var li = L.DomUtil.create('li', builder.options.cssClass, parentContainer);
 
 	if (!disabled && entry.state == null) {
-		li.draggable = true;
+		li.draggable = treeType === 'navigator' ? false: true;
 
 		li.ondragstart = function drag(ev) {
 			ev.dataTransfer.setData('text', entry.row);
@@ -144,8 +146,15 @@ function _treelistboxEntry(parentContainer, treeViewData, entry, builder, isTree
 	for (var i in entry.columns) {
 		if (entry.columns[i].collapsed || entry.columns[i].expanded) {
 			var icon = L.DomUtil.create('img', 'ui-listview-icon', text);
+
+			if (treeType === 'navigator')
+				icon.draggable = false;
+
 			var iconId = _getCellIconId(entry.columns[i]);
-			icon.src = builder._createIconURL(iconId, true);
+			L.DomUtil.addClass(icon, iconId + 'img');
+			var iconURL = builder._createIconURL(iconId, true);
+			L.LOUtil.setImage(icon, iconURL.split('/').pop(), builder.map.getDocType());
+			L.DomUtil.addClass(span, 'ui-listview-expandable-with-icon');
 		} else if (entry.columns[i].text) {
 			var innerText = L.DomUtil.create('span', builder.options.cssClass + ' ui-treeview-cell-text', text);
 			innerText.innerText = entry.columns[i].text || entry.text;
@@ -249,7 +258,8 @@ function _headerlistboxEntry(parentContainer, treeViewData, entry, builder) {
 			var icon = L.DomUtil.create('img', 'ui-listview-icon', td);
 			var iconId = _getCellIconId(entry.columns[i]);
 			L.DomUtil.addClass(icon, iconId + 'img');
-			icon.src = builder._createIconURL(iconId, true);
+			var iconURL = builder._createIconURL(iconId, true);
+			L.LOUtil.setImage(icon, iconURL.split('/').pop(), builder.map.getDocType());
 		} else if (entry.columns[i].text)
 			td.innerText = entry.columns[i].text;
 
@@ -465,7 +475,13 @@ function _treelistboxControl(parentContainer, data, builder) {
 	}
 
 	if (!data.entries || data.entries.length === 0) {
-		L.DomUtil.addClass(table, 'empty');
+		if (data.id === 'contenttree') {
+			var tr = L.DomUtil.create('tr', builder.options.cssClass + ' ui-listview-entry', tbody);
+			tr.setAttribute('role', 'row');
+			tr.innerText = _('Headings and objects that you add to the document will appear here');
+		} else {
+			L.DomUtil.addClass(table, 'empty');
+		}
 		return false;
 	}
 
@@ -577,6 +593,11 @@ function _treelistboxControl(parentContainer, data, builder) {
 }
 
 JSDialog.treeView = function (parentContainer, data, builder) {
+	var id = data.parent ? (data.parent.parent ? (data.parent.parent.parent ? (data.parent.parent.parent.id ? data.parent.parent.parent.id: null): null): null): null;
+
+	if (id && typeof(id) === 'string' && id.startsWith('Navigator'))
+		treeType = 'navigator';
+
 	var buildInnerData = _treelistboxControl(parentContainer, data, builder);
 	return buildInnerData;
 };

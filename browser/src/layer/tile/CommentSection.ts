@@ -219,10 +219,9 @@ export class Comment extends CanvasSectionObject {
 		if (this.sectionProperties.commentListSection.sectionProperties.commentsAreListed)
 			tdImg.style.visibility = 'visible';
 
-		imgAuthor.setAttribute('src', L.LOUtil.getImageURL('user.svg'));
+		L.LOUtil.setImage(imgAuthor, 'user.svg', this.sectionProperties.docLayer._docType);
 		imgAuthor.setAttribute('width', this.sectionProperties.imgSize[0]);
 		imgAuthor.setAttribute('height', this.sectionProperties.imgSize[1]);
-		imgAuthor.onerror = function () { imgAuthor.setAttribute('src', L.LOUtil.getImageURL('user.svg')); };
 
 		if (this.sectionProperties.docLayer._docType === 'text') {
 			this.sectionProperties.replyCountNode = L.DomUtil.create('div', 'cool-annotation-reply-count-collapsed', tdImg);
@@ -241,6 +240,7 @@ export class Comment extends CanvasSectionObject {
 		this.sectionProperties.menu.id = 'comment-annotation-menu-' + this.sectionProperties.data.id;
 		this.sectionProperties.menu.tabIndex = 0;
 		this.sectionProperties.menu.onclick = this.menuOnMouseClick.bind(this);
+		this.sectionProperties.menu.onkeypress = this.menuOnKeyPress.bind(this);
 		this.sectionProperties.menu.onfocus = function() { app.view.commentHasFocus = true; };
 		var divMenuTooltipText = _('Open menu');
 		this.sectionProperties.menu.dataset.title = divMenuTooltipText;
@@ -738,6 +738,13 @@ export class Comment extends CanvasSectionObject {
 	// eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
 	private menuOnMouseClick (e: any): void {
 		$(this.sectionProperties.menu).contextMenu();
+		L.DomEvent.stopPropagation(e);
+	}
+
+	// eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
+	private menuOnKeyPress (e: any): void {
+		if (e.code === 'Space' || e.code === 'Enter')
+			$(this.sectionProperties.menu).contextMenu();
 		L.DomEvent.stopPropagation(e);
 	}
 

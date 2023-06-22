@@ -3,7 +3,7 @@
 
 AC_PREREQ([2.63])
 
-AC_INIT([coolwsd], [23.05.0.1], [https://github.com/CollaboraOnline/online/issues], [coolwsd], [https://collaboraonline.github.io/])
+AC_INIT([coolwsd], [23.05.0.5], [https://github.com/CollaboraOnline/online/issues], [coolwsd], [https://collaboraonline.github.io/])
 LT_INIT([shared, disable-static, dlopen])
 
 AM_INIT_AUTOMAKE([1.10 foreign subdir-objects tar-pax -Wno-portability])
@@ -372,6 +372,10 @@ AC_ARG_ENABLE([werror],
 AC_ARG_ENABLE([cypress],
             AS_HELP_STRING([--enable-cypress],
                            [Enable cypress tests.]))
+
+AC_ARG_ENABLE([tests],
+            AS_HELP_STRING([--disable-tests],
+                           [Do not build and run unit tests.]))
 
 AC_ARG_WITH([help-url],
             AS_HELP_STRING([--with-help-url=<url>],
@@ -1023,6 +1027,20 @@ else
     AC_MSG_ERROR(Compiler doesn't support C++17)
 fi
 
+# Check if we have clang, rather than gcc, which
+# doesn't like -pthread on the linker command-line.
+AC_MSG_CHECKING([whether the compiler is clang])
+AC_COMPILE_IFELSE([AC_LANG_SOURCE([
+    #if !defined(__clang__)
+    #error not clang
+    #endif
+])],
+                    [AC_MSG_RESULT([yes])
+                    AC_DEFINE([HAVE_CLANG],1,[whether the C++ compiler is clang])],
+                    [AC_MSG_RESULT([no])
+                    AC_DEFINE([HAVE_CLANG],0,[whether the C++ compiler is clang])])
+AM_CONDITIONAL([HAVE_CLANG], [test "$HAVE_CLANG" = "1"])
+
 AS_IF([test "$ENABLE_GTKAPP" != true],
 [CXXFLAGS="$CXXFLAGS $CXXFLAGS_CXXSTD"])
 
@@ -1469,6 +1487,15 @@ else
 fi
 AM_CONDITIONAL([ENABLE_CYPRESS], [$ENABLE_CYPRESS])
 
+ENABLE_TESTS=true
+if test "$enable_tests" = "no"; then
+    ENABLE_TESTS=false
+else
+    ENABLE_TESTS=true
+fi
+AM_CONDITIONAL([ENABLE_TESTS], [$ENABLE_TESTS])
+
+
 AC_MSG_CHECKING([for URL of online help])
 if test -n "$with_help_url" -a "$with_help_url" != "no"; then
     HELP_URL="$with_help_url"
@@ -1481,6 +1508,7 @@ else
     AC_MSG_RESULT([default: $HELP_URL])
 fi
 AC_SUBST(HELP_URL)
+AC_DEFINE_UNQUOTED([HELP_URL],["$HELP_URL"],[Default value of help root URL])
 
 AC_MSG_CHECKING([for allowed languages for Writing Aids])
 if test -n "$with_dictionaries" -a "$with_dictionaries" != "no"; then

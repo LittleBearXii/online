@@ -390,12 +390,12 @@ function checkIfDocIsLoaded(isMultiUser) {
 
 // Assert that NO keyboard input is accepted (i.e. keyboard should be HIDDEN).
 function assertNoKeyboardInput() {
-	cy.cGet('textarea.clipboard').should('have.attr', 'data-accept-input', 'false');
+	cy.cGet('div.clipboard').should('have.attr', 'data-accept-input', 'false');
 }
 
 // Assert that keyboard input is accepted (i.e. keyboard should be VISIBLE).
 function assertHaveKeyboardInput() {
-	cy.cGet('textarea.clipboard').should('have.attr', 'data-accept-input', 'true');
+	cy.cGet('div.clipboard').should('have.attr', 'data-accept-input', 'true');
 }
 
 // Assert that we have cursor and focus on the text area of the document.
@@ -498,6 +498,17 @@ function matchClipboardText(regexp) {
 	});
 }
 
+function clipboardTextShouldBeDifferentThan(text) {
+	doIfInWriter(function() {
+		cy.cGet('body').contains('#copy-paste-container p font', text).should('not.exist');
+	});
+	doIfInCalc(function() {
+		cy.cGet('body').contains('#copy-paste-container pre', text).should('not.exist');
+	});
+	doIfInImpress(function() {
+		cy.cGet('body').contains('#copy-paste-container pre', text).should('not.exist');
+	});
+}
 
 // This is called during a test to reload the same document after
 // some modification. The purpose is typically to verify that
@@ -985,7 +996,7 @@ function moveCursor(direction, modifier,
 function typeIntoDocument(text) {
 	cy.log('Typing into document - start.');
 
-	cy.cGet('textarea.clipboard').type(text, {force: true});
+	cy.cGet('div.clipboard').type(text, {force: true});
 
 	cy.log('Typing into document - end.');
 }
@@ -1170,6 +1181,39 @@ function getCoolFrameWindow() {
 		.its('0.contentWindow')
 		.should('exist');
 }
+
+// Create an alias to a point whose coordinate are the middle point of the blinking cursor
+// It should be used with clickAt (see function below)
+function getBlinkingCursorPosition(aliasName) {
+	var cursorSelector = '.cursor-overlay .blinking-cursor';
+	cy.cGet(cursorSelector).then(function(cursor) {
+		var boundRect = cursor[0].getBoundingClientRect();
+		var xPos = boundRect.right;
+		var yPos = (boundRect.top + boundRect.bottom) / 2;
+		cy.wrap({x: xPos, y: yPos}).as(aliasName);
+	});
+
+	cy.get('@' + aliasName).then(point => {
+		expect(point.x).to.be.greaterThan(0);
+		expect(point.y).to.be.greaterThan(0);
+	});
+}
+
+// Simulate a click at the point referenced by the passed alias.
+// If the 'double' parameter is true, a double click is simulated.
+// To be used in pair with getBlinkingCursorPosition (see function above)
+function clickAt(aliasName, double = false) {
+	cy.get('@' + aliasName).then(point => {
+		expect(point.x).to.be.greaterThan(0);
+		expect(point.y).to.be.greaterThan(0);
+		if (double) {
+			cy.cGet('body').dblclick(point.x, point.y);
+		} else {
+			cy.cGet('body').click(point.x, point.y);
+		}
+	});
+}
+
 module.exports.loadTestDoc = loadTestDoc;
 module.exports.checkIfDocIsLoaded = checkIfDocIsLoaded;
 module.exports.assertCursorAndFocus = assertCursorAndFocus;
@@ -1179,6 +1223,7 @@ module.exports.selectAllText = selectAllText;
 module.exports.clearAllText = clearAllText;
 module.exports.expectTextForClipboard = expectTextForClipboard;
 module.exports.matchClipboardText = matchClipboardText;
+module.exports.clipboardTextShouldBeDifferentThan = clipboardTextShouldBeDifferentThan;
 module.exports.closeDocument = closeDocument;
 module.exports.reload = reload;
 module.exports.afterAll = afterAll;
@@ -1214,3 +1259,5 @@ module.exports.getVisibleBounds = getVisibleBounds;
 module.exports.assertFocus = assertFocus;
 module.exports.getCoolFrameWindow = getCoolFrameWindow;
 module.exports.loadTestDocNoIntegration = loadTestDocNoIntegration;
+module.exports.getBlinkingCursorPosition = getBlinkingCursorPosition;
+module.exports.clickAt = clickAt;

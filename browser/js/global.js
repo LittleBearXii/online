@@ -85,17 +85,18 @@ window.app = {
 
 	    ie = 'ActiveXObject' in window,
 
+		cypressTest = ua.indexOf('cypress') !== -1,
 	    webkit    = ua.indexOf('webkit') !== -1,
 	    phantomjs = ua.indexOf('phantom') !== -1,
 	    android23 = ua.search('android [23]') !== -1,
 	    chrome    = ua.indexOf('chrome') !== -1,
-	    gecko     = ua.indexOf('gecko') !== -1  && !webkit && !window.opera && !ie,
+	    gecko     = (ua.indexOf('gecko') !== -1 || (cypressTest && 'MozUserFocus' in doc.style))
+			&& !webkit && !window.opera && !ie,
 	    safari    = !chrome && (ua.indexOf('safari') !== -1 || uv.indexOf('apple') == 0),
 
 	    win = navigator.platform.indexOf('Win') === 0,
 
 	    mobile = typeof orientation !== 'undefined' || ua.indexOf('mobile') !== -1,
-	    cypressTest = ua.indexOf('cypress') !== -1,
 	    msPointer = !window.PointerEvent && window.MSPointerEvent,
 	    pointer = (window.PointerEvent && navigator.pointerEnabled && navigator.maxTouchPoints) || msPointer,
 
@@ -110,7 +111,11 @@ window.app = {
 			(window.DocumentTouch && document instanceof window.DocumentTouch)) && !chromebook;
 
 	var isInternetExplorer = (navigator.userAgent.toLowerCase().indexOf('msie') != -1 ||
-			navigator.userAgent.toLowerCase().indexOf('trident') != -1);
+				  navigator.userAgent.toLowerCase().indexOf('trident') != -1);
+
+	var navigatorLang = navigator.languages && navigator.languages.length ? navigator.languages[0] :
+	    (navigator.language || navigator.userLanguage || navigator.browserLanguage || navigator.systemLanguage);
+
 
 	global.L = {};
 
@@ -227,7 +232,11 @@ window.app = {
 
 		// @property retina: Boolean
 		// `true` for browsers on a high-resolution "retina" screen.
-		retina: (window.devicePixelRatio || (window.screen.deviceXDPI / window.screen.logicalXDPI)) > 1
+		retina: (window.devicePixelRatio || (window.screen.deviceXDPI / window.screen.logicalXDPI)) > 1,
+
+		// @property lang: String
+		// browser language locale
+		lang: navigatorLang
 	};
 
 	global.mode = {
@@ -712,6 +721,7 @@ window.app = {
 				var uriWithRouteToken = http.response.uri;
 				var params = (new URL(uriWithRouteToken)).searchParams;
 				global.routeToken = params.get('RouteToken');
+				window.app.console.log('updated routeToken: ' + global.routeToken);
 				that.innerSocket = new WebSocket(uriWithRouteToken);
 				that.innerSocket.binaryType = that.binaryType;
 				that.innerSocket.onerror = function() {

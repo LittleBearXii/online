@@ -35,7 +35,7 @@ function clickOnFirstCell(firstClick = true, dblClick = false) {
 	cy.log('Param - firstClick: ' + firstClick);
 	cy.log('Param - dblClick: ' + dblClick);
 
-	cy.wait(1000);
+	cy.wait(2000);
 	// Use the tile's edge to find the first cell's position
 	cy.cGet('#map')
 		.then(function(items) {
@@ -85,8 +85,8 @@ function typeIntoFormulabar(text) {
 			}
 		});
 
-	cy.cGet('#sc_input_window.formulabar').should('have.focus');
 	cy.cGet('#sc_input_window.formulabar').click(); // This probably shouldn't be here, but acceptformula doesn't get visible without a click.
+	cy.cGet('#sc_input_window.formulabar').should('have.focus');
 	cy.cGet('body').type(text);
 
 	helper.doIfOnMobile(function() {
@@ -192,7 +192,7 @@ function ensureViewContainsCellCursor() {
 	helper.getOverlayItemBounds('#test-div-overlay-cell-cursor-border-0', sheetCursorBounds);
 	helper.getItemBounds('#test-div-tiles', sheetViewBounds);
 
-	cy.wrap(true).should(function () {
+	cy.wrap(true).then(function () {
 		cy.log('ensureViewContainsCellCursor: cursor-area is ' + sheetCursorBounds.toString() + ' view-area is ' + sheetViewBounds.toString());
 		expect(sheetViewBounds.contains(sheetCursorBounds)).to.equal(true, 'view-area must contain cursor-area');
 	});

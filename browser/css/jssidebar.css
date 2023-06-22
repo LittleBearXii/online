@@ -11,6 +11,11 @@ img.sidebar.ui-image {
 	padding: 6px;
 }
 
+/* Impress -> Master Slides images should fit in the visible width */
+img.sidebar.ui-drawing-area {
+	width: 300px;
+}
+
 .sidebar.ui-grid {
 	row-gap: 8px;
 }
@@ -94,10 +99,8 @@ img.sidebar.ui-image {
 	line-height: var(--default-height);
 }
 
-#fontheight,
-#AlignmentPropertyPanel #textorientbox,
 .sidebar.ui-grid.ui-grid-cell > div {
-	justify-content: end;
+	justify-content: start;
 	display: flex;
 }
 
@@ -123,19 +126,18 @@ div.sidebar.ui-grid .checkbutton.sidebar,
 
 .menubutton.sidebar span {
 	display: none;
-	font-size: var(--default-font-size);
 }
 
 .menubutton.sidebar:hover span {
 	position: absolute;
+	font-size: var(--default-font-size);
 	display: block;
 	width: auto;
-	background-color: var(--color-background-darker);
-	color: var(--color-text-darker);
-	padding: 2px 4px;
+	padding: 14px 4px;
 	border-radius: var(--border-radius);
 	white-space: nowrap;
 	margin-inline-start: -14px;
+	margin-block-start: 2px;
 }
 
 .sidebar.ui-grid.ui-grid-cell .menubutton {
@@ -191,6 +193,14 @@ div.sidebar.ui-grid .checkbutton.sidebar,
 	color: var(--color-text-dark);
 	border-radius: var(--border-radius);
 }
+[data-theme='dark'] .hasnotebookbar .ui-content.unotoolbutton.selected.has-label,
+[data-theme='dark'] #toggledarktheme,
+[data-theme='dark'] .hasnotebookbar .ui-content.unotoolbutton.selected.inline,
+[data-theme='dark'] .hasnotebookbar .ui-content.unotoolbutton.selected:not(.has-label):not(.inline),
+[data-theme='dark'] .sidebar.unotoolbutton.selected {
+	background-color: var(--color-background-darker);
+	border-color: var(--color-border-darker);
+}
 /* selected hover */
 .hasnotebookbar .ui-content.unotoolbutton.selected:hover,
 .unotoolbutton.notebookbar:hover,
@@ -218,6 +228,7 @@ div.sidebar.ui-grid .checkbutton.sidebar,
 }
 .sidebar.jsdialog.checkbutton {
 	font-size: var(--default-font-size);
+	align-items: center;
 }
 
 .sidebar.jsdialog.checkbutton label {
@@ -230,6 +241,7 @@ div.sidebar.ui-grid .checkbutton.sidebar,
 
 /* writer */
 
+#ParaPropertyPanel.sidebar #backgroundcolor,
 #PosSizePropertyPanel.sidebar #selectrotationtype {
 	justify-content: end;
 }
@@ -241,14 +253,11 @@ div.sidebar.ui-grid .checkbutton.sidebar,
 #PosSizePropertyPanel.sidebar #ratio input[type='checkbox'] {
 	margin-inline-start: 0;
 }
+
+#ParaPropertyPanel.sidebar #indentfieldbox,
 #ParaPropertyPanel.sidebar #box3 {
 	display: grid;
 	justify-content: start;
-	row-gap: 4px;
-}
-
-#ParaPropertyPanel.sidebar #indentfieldbox {
-	display: grid;
 	row-gap: 4px;
 }
 
@@ -262,10 +271,6 @@ button#button2.ui-pushbutton.jsdialog.sidebar {
 	padding: 4px;
 	position: relative;
 	left: -10px;
-}
-
-#ParaPropertyPanel.sidebar.ui-grid #indentfieldbox {
-	width: 158px;
 }
 
 #TableEditPanel.sidebar.ui-grid #delete_label {
@@ -289,11 +294,14 @@ button#button2.ui-pushbutton.jsdialog.sidebar {
 	height: auto;
 }
 
-/* fixes sidebar width in calc (textorientbox, alignment buttons were too big) */
-#AlignmentPropertyPanel button {
-	min-width: 32px;
-	width: 32px;
-	margin: 0 2px;
+/* fixes sidebar width in calc (textorientbox) */
+#textorientbox {
+	grid-template-columns: repeat(auto-fill, minmax(32px, 1fr));
+	grid-gap: inherit;
+}
+#textorientbox button {
+	min-width: auto;
+	width: auto;
 }
 
 
@@ -320,20 +328,68 @@ button#button2.ui-pushbutton.jsdialog.sidebar {
 
 /* not available commands*/
 
-#orientationcontrol,
-#rotation {
+.sidebar #orientationcontrol,
+.sidebar #rotation {
 	visibility: hidden;
 }
 
-#orientationcontrol,
-#rotation, #grid1-cell-5-1,
-#rotationlabel {
+.sidebar #orientationcontrol,
+.sidebar #rotation, .sidebar #grid1-cell-5-1,
+.sidebar #rotationlabel {
 	height: 0;
 }
 
 
-/* navigator */
+/* Navigator */
+
+#NavigatorDeck #contentbox,
+#NavigatorDeck #contenttree,
+#NavigatorDeck #tree {
+	position: absolute;
+	top: 0;
+	bottom: 10px;
+	left: 10px;
+	right: 10px;
+	border: none;
+}
+#NavigatorDeck .ui-expander-content > .root-container.jsdialog {
+	margin: 0;
+}
+#NavigatorDeck .ui-treeview-entry {
+	padding-inline-start: 0;
+	background-color: transparent;
+	margin-block-end: 8px;
+}
+#NavigatorDeck .ui-listview-icon {
+	width: var(--btn-size-s);
+	height: var(--btn-size-s);
+}
+#NavigatorDeck .ui-treeview-entry.selected {
+	background-color: var(--color-background-dark);
+	color: var(--color-primary);
+}
+#NavigatorDeck .ui-treeview-entry.selected:not(.ui-listview-expandable-with-icon)::before {
+	content: '–';
+	font-size: 17px;
+	font-weight: 500;
+	line-height: 1.2;
+	position: absolute;
+	left: 20px;
+}
+#NavigatorDeck .ui-treeview-cell-text {
+	/* good to move this into css var*/
+	font-size: 14px;
+}
+#NavigatorDeck .ui-treeview-cell {
+	/* Move this whole block away and fix in the main control */
+	display: flex;
+	align-items: center;
+}
 
 span.jsdialog.sidebar.ui-treeview-entry.ui-treeview-notexpandable {
 	margin-left: 15px;
+}
+
+#NavigatorDeck .ui-expander {
+	display: none;
 }

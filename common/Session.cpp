@@ -37,7 +37,8 @@ Session::Session(const std::shared_ptr<ProtocolHandlerInterface> &protocol,
     _isAllowChangeComments(false),
     _haveDocPassword(false),
     _isDocPasswordProtected(false),
-    _watermarkOpacity(0.2)
+    _watermarkOpacity(0.2),
+    _enableAccessibility(false)
 {
 }
 
@@ -205,6 +206,11 @@ void Session::parseDocOptions(const StringVector& tokens, int& part, std::string
             _macroSecurityLevel = value;
             ++offset;
         }
+        else if (name == "enableAccessibility")
+        {
+            _enableAccessibility = value == "true";
+            ++offset;
+        }
     }
 
     Util::mapAnonymized(_userId, _userIdAnonym);
@@ -250,7 +256,7 @@ void Session::handleMessage(const std::vector<char> &data)
     try
     {
         std::unique_ptr< std::vector<char> > replace;
-        if (!Util::isFuzzing() && UnitBase::get().filterSessionInput(this, &data[0], data.size(), replace))
+        if (UnitBase::isUnitTesting() && !Util::isFuzzing() && UnitBase::get().filterSessionInput(this, &data[0], data.size(), replace))
         {
             if (!replace || replace->empty())
                 _handleInput(replace->data(), replace->size());

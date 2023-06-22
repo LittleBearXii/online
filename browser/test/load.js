@@ -1,6 +1,7 @@
 var vm = require("vm");
 var fs = require("fs");
 var tmp = require('tmp');
+const WebSocket = require('ws');
 
 if (process.argv.length < 3 ||
     process.argv[2] == '--help') {
@@ -76,21 +77,27 @@ else
 data = data.replace(/%ACCESS_TOKEN%/g, '');
 data = data.replace(/%ACCESS_TOKEN_TTL%/g, '0');
 data = data.replace(/%ACCESS_HEADER%/g, '');
+data = data.replace(/%POSTMESSAGE_ORIGIN%/g, '');
 data = data.replace(/%BROWSER_LOGGING%/g, 'true');
+data = data.replace(/%COOLWSD_VERSION%/g, 'loadjs');
 data = data.replace(/%ENABLE_WELCOME_MSG%/g, 'false');
 data = data.replace(/%AUTO_SHOW_WELCOME%/g, 'false');
 data = data.replace(/%AUTO_SHOW_FEEDBACK%/g, 'false');
 data = data.replace(/%USER_INTERFACE_MODE%/g, '');
 data = data.replace(/%USE_INTEGRATION_THEME%/g, 'true');
+data = data.replace(/%ENABLE_MACROS_EXECUTION%/g, '');
 data = data.replace(/%OUT_OF_FOCUS_TIMEOUT_SECS%/g, '1000000');
 data = data.replace(/%IDLE_TIMEOUT_SECS%/g, '1000000');
-data = data.replace(/%REUSE_COOKIES%/g, 'false');
 data = data.replace(/%PROTOCOL_DEBUG%/g, 'true');
 data = data.replace(/%FRAME_ANCESTORS%/g, '');
 data = data.replace(/%SOCKET_PROXY%/g, 'false');
+data = data.replace(/%GROUP_DOWNLOAD_AS%/g, 'false');
 data = data.replace(/%UI_DEFAULTS%/g, '{}');
 data = data.replace(/%HEXIFY_URL%/g, '""');
-data = data.replace(/%GROUP_DOWNLOAD_AS%/g, 'false');
+data = data.replace(/%CHECK_FILE_INFO_OVERRIDE%/g, 'false');
+data = data.replace(/%DEEPL_ENABLED%/g, 'false');
+data = data.replace(/%ZOTERO_ENABLED%/g, 'false');
+data = data.replace(/%INDIRECTION_URL%/g, '');
 
 window = new JSDOM(data, {
 				runScripts: 'dangerously',
@@ -193,44 +200,16 @@ function dumpStats() {
 }
 
 window.onload = function() {
-	console.debug('socket ' + window.socket);
-	map = window.socket._map;
+	console.debug('socket ' + window.app.socket);
+	var map = window.app.map;
 
-	// no need to slurp since there's no actual layout rendering
-	var original = window.socket._onMessage.bind(window.socket);
-	var injectedOnMessage = function(e) {
-		if (record_stats)
-			socketMessageCount++;
-		window.socket._extractTextImg(e);
-		let textMsg = e.textMsg;
-		if (!single_view) {
-			if (!textMsg) return;
-			if (textMsg.indexOf('.uno:ModifiedStatus') >= 0)
-				map.fire('docloaded');
-			if (!record_stats) return;
-		}
-		// processing images takes significant amount of cpu time on JSDOM
-		if (textMsg.startsWith('tile:')) {
-			if (record_stats) {
-				processedTiles.push(new Date().getTime());
-			}
-			var command = window.socket.parseServerCmd(textMsg);
-			let sendMsg = `tileprocessed tile=0:${command.x}:${command.y}:${command.tileWidth}:${command.tileHeight}:0`;
-			window.socket._doSend(sendMsg);
-			return;
-		}
-		if (!single_view && !record_stats)
-			return;
-		original(e);
-	}
-	window.socket.socket.onmessage = injectedOnMessage.bind(window.socket);
-	window.socket._emitSlurpedEvents = function() {}
-	clearTimeout(window.socket._slurpTimer);
 	console.debug('Initialize / size map pieces ' + map);
 
 	// Force some sizes onto key pieces:
-	map._container.___clientWidth = 1024;
-	map._container.___clientHeight = 768;
+	map.innerWidth = 1920;
+	map.innerHeight = 1080
+	map._container.___clientWidth = 1920;
+	map._container.___clientHeight = 1080;
 
 	map.on('docloaded', function(){
 		if (docLoaded) return;
@@ -257,8 +236,9 @@ window.onload = function() {
 				console.debug(zoomMessage);
 				window.app.socket.sendMessage(zoomMessage);
 				await sleep(500);
-				// mesh the keyboard:
+				// mash the keyboard:
 				let dummyInput = 'askdjf ,asdhflkas r;we f;akdn.adh ;o wh;fa he;qw e.fkahsd ;vbawe.kguday;f vas.,mdb kaery kejraerga';
+				dummyInput = dummyInput.repeat(10);
 				map.focus();
 				let inputIndex = 0;
 				if (record_stats) {
@@ -281,13 +261,13 @@ window.onload = function() {
 					}
 //					console.debug('sending input text= ' + dummyInput[inputIndex]);
 					if (dummyInput.charCodeAt(inputIndex) === 32) { // space
-						window.socket._doSend(
+						window.app.socket._doSend(
 							'key' +
 							' type=' + 'input' +
 							' char=' + dummyInput.charCodeAt(inputIndex) + ' key=0\n'
 						);
 					} else {
-						window.socket._doSend(`textinput id=0 text=${dummyInput[inputIndex]}`);
+						window.app.socket._doSend(`textinput id=0 text=${dummyInput[inputIndex]}`);
 					}
 					inputIndex = (inputIndex + 1) % dummyInput.length;
 				}, typing_speed);

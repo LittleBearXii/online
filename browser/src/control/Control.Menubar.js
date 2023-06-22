@@ -127,7 +127,8 @@ L.Control.Menubar = L.Control.extend({
 					{name: _('Show Ruler'), id: 'showruler', type: 'action'},
 					{name: _('Show Status Bar'), id: 'showstatusbar', type: 'action'},
 					{name: _('Dark Mode'), id: 'toggledarktheme', type: 'action'},
-					{uno: '.uno:Sidebar'},
+					{uno: '.uno:SidebarDeck.PropertyDeck', name: _UNO('.uno:Sidebar')},
+					{uno: '.uno:Navigator', id: 'navigator'},
 					{type: 'separator'},
 					{name: _UNO('.uno:ShowResolvedAnnotations', 'text'), id: 'showresolved', type: 'action'},
 					{uno: '.uno:ControlCodes'},
@@ -414,14 +415,14 @@ L.Control.Menubar = L.Control.extend({
 				   {name: _('Show Ruler'), id: 'showruler', type: 'action'},
 				   {name: _('Show Status Bar'), id: 'showstatusbar', type: 'action'},
 				   {name: _('Dark Mode'), id: 'toggledarktheme', type: 'action'},
-				   {uno: '.uno:Sidebar'},
+				   {name: _('Master View'), uno: '.uno:SlideMasterPage'},
+				   {uno: '.uno:SidebarDeck.PropertyDeck', name: _UNO('.uno:Sidebar')},
+				   {uno: '.uno:Navigator', id: 'navigator'},
 				   {type: 'separator'},
-				   {uno: '.uno:SlideMasterPage'},
 				   {uno: '.uno:ModifyPage'},
 				   {uno: '.uno:SlideChangeWindow'},
 				   {uno: '.uno:CustomAnimation'},
 				   {uno: '.uno:MasterSlidesPanel'},
-				   {uno: '.uno:Navigator'},
 				])},
 			{name: _UNO('.uno:InsertMenu', 'presentation'), id: 'insert', type: 'menu', menu: [
 				{name: _('Local Image...'), id: 'insertgraphic', type: 'action'},
@@ -485,6 +486,8 @@ L.Control.Menubar = L.Control.extend({
 				{name: _UNO('.uno:InsertSlide', 'presentation'), id: 'insertpage', type: 'action'},
 				{name: _UNO('.uno:DuplicateSlide', 'presentation'), id: 'duplicatepage', type: 'action'},
 				{name: _UNO('.uno:DeleteSlide', 'presentation'), id: 'deletepage', type: 'action'},
+				{name: _UNO('.uno:ShowSlide', 'presentation'), id: 'showslide', type: 'action'},
+				{name: _UNO('.uno:HideSlide', 'presentation'), id: 'hideslide', type: 'action'},
 				{type: 'separator', id: 'fullscreen-presentation-separator'},
 				{name: _('Fullscreen presentation'), id: 'fullscreen-presentation', type: 'action'},
 				{name: _('Present current slide'), id: 'presentation-currentslide', type: 'action'}]
@@ -554,7 +557,8 @@ L.Control.Menubar = L.Control.extend({
 					{type: 'separator'},
 					{name: _('Toggle UI Mode'), id: 'toggleuimode', type: 'action'},
 					{name: _('Dark Mode'), id: 'toggledarktheme', type: 'action'},
-					{uno: '.uno:Sidebar'},
+					{uno: '.uno:SidebarDeck.PropertyDeck', name: _UNO('.uno:Sidebar')},
+					{uno: '.uno:Navigator', id: 'navigator'},
 					{name: _('Show Status Bar'), id: 'showstatusbar', type: 'action'}
 				])},
 			{name: _UNO('.uno:InsertMenu', 'presentation'), id: 'insert', type: 'menu', menu: [
@@ -591,7 +595,7 @@ L.Control.Menubar = L.Control.extend({
 				{type: 'separator'},
 				{uno: '.uno:OutlineBullet'}]
 			},
-			{name: _UNO('.uno:TableMenu', 'text'/*HACK should be 'presentation', but not in xcu*/), type: 'menu', menu: [
+			{name: _UNO('.uno:TableMenu', 'text'/*HACK should be 'presentation', but not in xcu*/), id: 'table', type: 'menu', menu: [
 				{name: _UNO('.uno:InsertTable', 'text'), uno: '.uno:InsertTable'},
 				{name: _UNO('.uno:TableInsertMenu', 'text'/*HACK should be 'presentation', but not in xcu*/), type: 'menu', menu: [
 					{name: _UNO('.uno:InsertRowsBefore', 'presentation'), uno: '.uno:InsertRowsBefore'},
@@ -683,7 +687,8 @@ L.Control.Menubar = L.Control.extend({
 				   {name: _('Toggle UI Mode'), id: 'toggleuimode', type: 'action'},
 				   {name: _('Show Status Bar'), id: 'showstatusbar', type: 'action'},
 				   {name: _('Dark Mode'), id: 'toggledarktheme', type: 'action'},
-				   {uno: '.uno:Sidebar'},
+				   {uno: '.uno:SidebarDeck.PropertyDeck', name: _UNO('.uno:Sidebar')},
+				   {uno: '.uno:Navigator', id: 'navigator'},
 				   {name: _UNO('.uno:FreezePanes', 'spreadsheet', true), id: 'FreezePanes', type: 'action', uno: '.uno:FreezePanes'},
 				   {name: _UNO('.uno:FreezeCellsMenu', 'spreadsheet', true), id: 'FreezeCellsMenu', type: 'menu', uno: '.uno:FreezeCellsMenu', menu: [
 					   {name: _UNO('.uno:FreezePanesColumn', 'spreadsheet', true), id: 'FreezePanesColumn', type: 'action', uno: '.uno:FreezePanesColumn'},
@@ -1678,6 +1683,16 @@ L.Control.Menubar = L.Control.extend({
 						} else {
 							$(aItem).text(_('Use Tabbed view'));
 						}
+					} else if (id === 'showslide') {
+						if (!self._map._docLayer.isHiddenSlide(self._map.getCurrentPartNumber()))
+							$(aItem).hide();
+						else
+							$(aItem).show();
+					} else if (id === 'hideslide') {
+						if (self._map._docLayer.isHiddenSlide(self._map.getCurrentPartNumber()))
+							$(aItem).hide();
+						else
+							$(aItem).show();
 					} else if (self._map.getDocType() === 'presentation' && (id === 'deletepage' || id === 'insertpage' || id === 'duplicatepage')) {
 						if (id === 'deletepage') {
 							itemState = self._map['stateChangeHandler'].getItemValue('.uno:DeletePage');
@@ -1735,6 +1750,13 @@ L.Control.Menubar = L.Control.extend({
 						$(aItem).removeClass('disabled');
 					}
 				}
+			}
+
+			if (id === 'remotelink') {
+				if (self._map['wopi'].EnableRemoteLinkPicker)
+					$(aItem).show();
+				else
+					$(aItem).hide();
 			}
 		});
 	},
@@ -1878,6 +1900,10 @@ L.Control.Menubar = L.Control.extend({
 			this._map.sendUnoCommand('.uno:LOKSidebarWriterPage');
 			this._map.fire('showwizardsidebar', {noRefresh: true});
 			window.pageMobileWizard = true;
+		} else if (id === 'showslide') {
+			this._map.showSlide();
+		} else if (id === 'hideslide') {
+			this._map.hideSlide();
 		} else if (id.indexOf('morelanguages-') != -1) {
 			this._map.fire('morelanguages', { applyto: id.substr('morelanguages-'.length) });
 		}

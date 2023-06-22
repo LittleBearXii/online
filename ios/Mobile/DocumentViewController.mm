@@ -198,7 +198,8 @@ static IMP standardImpOfInputAccessoryView = nil;
                     [self.webView.configuration.userContentController removeScriptMessageHandlerForName:@"debug"];
                     [self.webView.configuration.userContentController removeScriptMessageHandlerForName:@"lok"];
                     [self.webView.configuration.userContentController removeScriptMessageHandlerForName:@"error"];
-                    self.webView.configuration.userContentController = nil;
+                    // Don't set webView.configuration.userContentController to
+                    // nil as it generates a "nil not allowed" compiler warning
                     [self.webView removeFromSuperview];
                     self.webView = nil;
                     }];
@@ -266,7 +267,9 @@ static IMP standardImpOfInputAccessoryView = nil;
 }
 
 - (void)webViewWebContentProcessDidTerminate:(WKWebView *)webView {
-    LOG_ERR("WebContent process terminated! What should we do?");
+    // Fix issue #5876 by closing the document if the content process dies
+    [self bye];
+    LOG_ERR("WebContent process terminated! Is closing the document enough?");
 }
 
 - (void)userContentController:(WKUserContentController *)userContentController didReceiveScriptMessage:(WKScriptMessage *)message {
@@ -531,8 +534,7 @@ static IMP standardImpOfInputAccessoryView = nil;
                     return;
                 }
                 UIDocumentPickerViewController *picker =
-                    [[UIDocumentPickerViewController alloc] initWithURL:downloadAsTmpURL
-                                                                 inMode:UIDocumentPickerModeExportToService];
+                    [[UIDocumentPickerViewController alloc] initForExportingURLs:[NSArray arrayWithObject:downloadAsTmpURL] asCopy:YES];
                 picker.delegate = self;
                 [self presentViewController:picker
                                    animated:YES

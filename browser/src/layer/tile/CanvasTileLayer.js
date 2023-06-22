@@ -247,9 +247,6 @@ L.TileSectionManager = L.Class.extend({
 
 		this._sectionContainer = new CanvasSectionContainer(this._canvas, this._layer.isCalc() /* disableDrawing? */);
 
-		if (this._layer.isCalc())
-			this._sectionContainer.setClearColor('white'); // will be overridden by 'documentbackgroundcolor' msg.
-
 		app.sectionContainer = this._sectionContainer;
 		if (L.Browser.cypressTest) // If cypress is active, create test divs.
 			this._sectionContainer.testing = true;
@@ -388,22 +385,12 @@ L.TileSectionManager = L.Class.extend({
 		canvasOverlay.bindToSection(L.CSections.Tiles.name);
 	},
 
-	shouldDrawCalcGrid: function () {
-		var defaultBG = 'ffffff';
-		if (this._layer.coreDocBGColor)
-			return (this._layer.coreDocBGColor === defaultBG);
-		else
-			return true;
-	},
-
 	_onDrawGridSection: function () {
 		if (this.containerObject.isInZoomAnimation() || this.sectionProperties.tsManager.waitForTiles())
 			return;
 
-		if (this.sectionProperties.tsManager.shouldDrawCalcGrid()) {
-			// grid-section's onDrawArea is TileSectionManager's _drawGridSectionArea().
-			this.onDrawArea();
-		}
+		// grid-section's onDrawArea is TileSectionManager's _drawGridSectionArea().
+		this.onDrawArea();
 	},
 
 	_drawGridSectionArea: function (repaintArea, paneTopLeft, canvasCtx) {
@@ -988,6 +975,8 @@ L.CanvasTileLayer = L.Layer.extend({
 		this._selectedTextContent = '';
 		this._typingMention = false;
 		this._mentionText = [];
+
+		this._moveInProgress = false;
 	},
 
 	_initContainer: function () {
@@ -1340,12 +1329,27 @@ L.CanvasTileLayer = L.Layer.extend({
 
 	_moveStart: function () {
 		this._resetPreFetching();
+		this._moveInProgress = true;
 	},
 
 	_move: function () {
+		// We throttle the "move" event, but in moveEnd we always call
+		// a _move anyway, so if there are throttled moves still
+		// pending by the time moveEnd is called then there is no point
+		// processing them after _moveEnd because we are up to date
+		// already when they arrive and to do would just duplicate tile
+		// requests
+		if (!this._moveInProgress)
+			return;
+
 		this._update();
 		this._resetPreFetching(true);
 		this._onCurrentPageUpdate();
+	},
+
+	_moveEnd: function () {
+		this._move();
+		this._moveInProgress = false;
 	},
 
 	_requestNewTiles: function () {
@@ -1409,6 +1413,48 @@ L.CanvasTileLayer = L.Layer.extend({
 			if (!this._tiles[key].loaded) { return false; }
 		}
 		return true;
+	},
+
+	_initPreFetchPartTiles: function() {
+		// check existing timeout and clear it before the new one
+		if (this._partTilePreFetcher)
+			clearTimeout(this._partTilePreFetcher);
+		this._partTilePreFetcher =
+			setTimeout(
+				L.bind(function() {
+					this._preFetchPartTiles(this._selectedPart + this._map._partsDirection, this._selectedMode);
+				},
+				this),
+				100 /*ms*/);
+	},
+
+	_preFetchPartTiles: function(part, mode) {
+		var center = this._map.getCenter();
+		var zoom = this._map.getZoom();
+		var pixelBounds = this._map.getPixelBoundsCore(center, zoom);
+		var tileRange = this._pxBoundsToTileRange(pixelBounds);
+		var tilePositionsX = [];
+		var tilePositionsY = [];
+		for (var j = tileRange.min.y; j <= tileRange.max.y; j++) {
+			for (var i = tileRange.min.x; i <= tileRange.max.x; i++) {
+				var coords = new L.TileCoordData(i * this._tileSize, j * this._tileSize, zoom, part, mode);
+
+				if (!this._isValidTile(coords))
+					continue;
+
+				var key = this._tileCoordsToKey(coords);
+				if (this._tileCache[key])
+					continue;
+
+				var twips = this._coordsToTwips(coords);
+				tilePositionsX.push(twips.x);
+				tilePositionsY.push(twips.y);
+			}
+		}
+		if (tilePositionsX.length <= 0 || tilePositionsY.length <= 0) {
+			return;
+		}
+		this._sendTileCombineRequest(part, mode, tilePositionsX, tilePositionsY);
 	},
 
 	_sendTileCombineRequest: function(part, mode, tilePositionsX, tilePositionsY) {
@@ -1747,12 +1793,6 @@ L.CanvasTileLayer = L.Layer.extend({
 			obj = JSON.parse(textMsg.substring('redlinetablechanged:'.length + 1));
 			app.sectionContainer.getSectionWithName(L.CSections.CommentList.name).onACKComment(obj);
 		}
-		else if (textMsg.startsWith('documentbackgroundcolor:')) {
-			if (this.isCalc()) {
-				this.coreDocBGColor = textMsg.substring('documentbackgroundcolor:'.length + 1).trim();
-				app.sectionContainer.setClearColor('#' + this.coreDocBGColor);
-			}
-		}
 		else if (textMsg.startsWith('applicationbackgroundcolor:')) {
 			app.sectionContainer.setClearColor('#' + textMsg.substring('applicationbackgroundcolor:'.length + 1).trim());
 			app.sectionContainer.requestReDraw();
@@ -1768,6 +1808,31 @@ L.CanvasTileLayer = L.Layer.extend({
 		else if (textMsg.startsWith('versionbar:')) {
 			obj = JSON.parse(textMsg.substring('versionbar:'.length + 1));
 			this._map.fire('versionbar', obj);
+		}
+		else if (textMsg.startsWith('a11yfocuschanged:')) {
+			obj = JSON.parse(textMsg.substring('a11yfocuschanged:'.length + 1));
+			this._map._textInput.onAccessibilityFocusChanged(
+				obj.content, parseInt(obj.position), parseInt(obj.start), parseInt(obj.end), parseInt(obj.force) > 0);
+		}
+		else if (textMsg.startsWith('a11ycaretchanged:')) {
+			obj = JSON.parse(textMsg.substring('a11yfocuschanged:'.length + 1));
+			this._map._textInput.onAccessibilityCaretChanged(parseInt(obj.position));
+		}
+		else if (textMsg.startsWith('a11ytextselectionchanged:')) {
+			obj = JSON.parse(textMsg.substring('a11ytextselectionchanged:'.length + 1));
+			this._map._textInput.onAccessibilityTextSelectionChanged(parseInt(obj.start), parseInt(obj.end));
+		}
+		else if (textMsg.startsWith('a11yfocusedparagraph:')) {
+			obj = JSON.parse(textMsg.substring('a11yfocusedparagraph:'.length + 1));
+			this._map._textInput.setA11yFocusedParagraph(obj.content, parseInt(obj.position), parseInt(obj.start), parseInt(obj.end));
+		}
+		else if (textMsg.startsWith('a11ycaretposition:')) {
+			var pos = textMsg.substring('a11ycaretposition:'.length + 1);
+			this._map._textInput.setA11yCaretPosition(parseInt(pos));
+		}
+		else if (textMsg.startsWith('colorpalettes:')) {
+			var json = JSON.parse(textMsg.substring('colorpalettes:'.length + 1));
+			this._map.fire('colorpalettes:', json);
 		}
 	},
 
@@ -2433,7 +2498,7 @@ L.CanvasTileLayer = L.Layer.extend({
 		L.DomUtil.addClass(copyBtn, 'hyperlink-popup-btn');
 		copyBtn.setAttribute('title', _('Copy link location'));
 		var imgCopyBtn = L.DomUtil.create('img', 'hyperlink-pop-up-copyimg', copyBtn);
-		imgCopyBtn.setAttribute('src', L.LOUtil.getImageURL('lc_copyhyperlinklocation.svg'));
+		L.LOUtil.setImage(imgCopyBtn, 'lc_copyhyperlinklocation.svg', this._docType);
 		imgCopyBtn.setAttribute('width', 18);
 		imgCopyBtn.setAttribute('height', 18);
 		imgCopyBtn.setAttribute('style', 'padding: 4px');
@@ -2441,7 +2506,7 @@ L.CanvasTileLayer = L.Layer.extend({
 		L.DomUtil.addClass(editBtn, 'hyperlink-popup-btn');
 		editBtn.setAttribute('title', _('Edit link'));
 		var imgEditBtn = L.DomUtil.create('img', 'hyperlink-pop-up-editimg', editBtn);
-		imgEditBtn.setAttribute('src', L.LOUtil.getImageURL('lc_edithyperlink.svg'));
+		L.LOUtil.setImage(imgEditBtn, 'lc_edithyperlink.svg', this._docType);
 		imgEditBtn.setAttribute('width', 18);
 		imgEditBtn.setAttribute('height', 18);
 		imgEditBtn.setAttribute('style', 'padding: 4px');
@@ -2449,7 +2514,7 @@ L.CanvasTileLayer = L.Layer.extend({
 		L.DomUtil.addClass(removeBtn, 'hyperlink-popup-btn');
 		removeBtn.setAttribute('title', _('Remove link'));
 		var imgRemoveBtn = L.DomUtil.create('img', 'hyperlink-pop-up-removeimg', removeBtn);
-		imgRemoveBtn.setAttribute('src', L.LOUtil.getImageURL('lc_removehyperlink.svg'));
+		L.LOUtil.setImage(imgRemoveBtn, 'lc_removehyperlink.svg', this._docType);
 		imgRemoveBtn.setAttribute('width', 18);
 		imgRemoveBtn.setAttribute('height', 18);
 		imgRemoveBtn.setAttribute('style', 'padding: 4px');
@@ -2467,7 +2532,7 @@ L.CanvasTileLayer = L.Layer.extend({
 			if (!url.startsWith('#'))
 				map_.fire('warn', {url: url, map: map_, cmd: 'openlink'});
 			else
-				map_.sendUnoCommand('.uno:JumpToMark?Bookmark:string=' + url.substring(1));
+				map_.sendUnoCommand('.uno:JumpToMark?Bookmark:string=' + encodeURIComponent(url.substring(1)));
 		});
 		this._setupClickFuncForId('hyperlink-pop-up-copy', function () {
 			map_.sendUnoCommand('.uno:CopyHyperlinkLocation');
@@ -4982,6 +5047,7 @@ L.CanvasTileLayer = L.Layer.extend({
 			this._debugTyper = new L.LayerGroup();
 			this._debugTrace = new L.LayerGroup();
 			this._debugLogging = new L.LayerGroup();
+			this._debugTileDumping = new L.LayerGroup();
 			this._map.addLayer(this._debugInfo);
 			this._map.addLayer(this._debugInfo2);
 			var overlayMaps = {
@@ -4994,6 +5060,7 @@ L.CanvasTileLayer = L.Layer.extend({
 				'Sidebar Rerendering': this._debugSidebar,
 				'Performance Tracing': this._debugTrace,
 				'Protocol logging': this._debugLogging,
+				'Tile dumping': this._debugTileDumping
 			};
 			L.control.layers({}, overlayMaps, {collapsed: false}).addTo(this._map);
 
@@ -5017,6 +5084,8 @@ L.CanvasTileLayer = L.Layer.extend({
 					app.socket.setTraceEventLogging(true);
 				} else if (e.layer === this._debugLogging) {
 					window.setLogging(true);
+				} else if (e.layer === this._debugTileDumping) {
+					app.socket.sendMessage('toggletiledumping true');
 				}
 			}, this);
 			this._map.on('layerremove', function(e) {
@@ -5039,6 +5108,8 @@ L.CanvasTileLayer = L.Layer.extend({
 					app.socket.setTraceEventLogging(false);
 				} else if (e.layer === this._debugLogging) {
 					window.setLogging(false);
+				} else if (e.layer === this._debugTileDumping) {
+					app.socket.sendMessage('toggletiledumping false');
 				}
 			}, this);
 		}
@@ -5609,9 +5680,9 @@ L.CanvasTileLayer = L.Layer.extend({
 		var events = {
 			viewreset: this._viewReset,
 			movestart: this._moveStart,
-			moveend: this._move,
 			// update tiles on move, but not more often than once per given interval
 			move: L.Util.throttle(this._move, this.options.updateInterval, this),
+			moveend: this._moveEnd,
 			splitposchanged: this._move,
 		};
 
@@ -6365,6 +6436,8 @@ L.CanvasTileLayer = L.Layer.extend({
 				this._painter.update();
 			}
 		}
+		if (this._docType === 'presentation' || this._docType === 'drawing')
+			this._initPreFetchPartTiles();
 	},
 
 	_tileReady: function (coords, err, tile) {
@@ -6550,6 +6623,8 @@ L.CanvasTileLayer = L.Layer.extend({
 			twips = this._coordsToTwips(coords);
 			this._sendTileCombineRequest(coords.part, this._selectedMode, tilePositionsX, tilePositionsY);
 		}
+		if (this._docType === 'presentation' || this._docType === 'drawing')
+			this._initPreFetchPartTiles();
 	},
 
 	_cancelTiles: function () {
@@ -6657,8 +6732,10 @@ L.CanvasTileLayer = L.Layer.extend({
 
 		// FIXME: this _tileCache is used for prev/next slide; but it is
 		// dangerous in connection with typing / invalidation
-		if (!(this._tiles[key]._invalidCount > 0) && tile.el.src) {
-			this._tileCache[key] = tile.el;
+		if (!(this._tiles[key]._invalidCount > 0)) {
+			if (tile.el.src || tile.el instanceof HTMLCanvasElement) {
+				this._tileCache[key] = tile.el;
+			}
 		}
 
 		if (!tile.loaded && this._emptyTilesCount > 0) {
@@ -6921,7 +6998,9 @@ L.CanvasTileLayer = L.Layer.extend({
 			if (tile._debugTime.date !== 0)
 				msg += '<br>' + this._debugSetTimes(tile._debugTime, +new Date() - tile._debugTime.date).replace(/, /g, '<br>');
 			msg += '<br>nviewid: ' + tileMsgObj.nviewid;
-			tile._debugPopup.setContent(msg);
+			var node = document.createElement('p');
+			node.innerHTML = msg;
+			tile._debugPopup.setHTMLContent(node);
 
 			if (tile._debugTile) // deltas in yellow
 				tile._debugTile.setStyle({ fillOpacity: tile.lastKeyframe ? 0 : 0.1, fillColor: 'yellow' });
@@ -6957,6 +7036,17 @@ L.CanvasTileLayer = L.Layer.extend({
 				tile.el = img;
 			tile.loaded = true;
 			this._tileReady(coords, null /* err */, tile);
+		}
+
+		// CollaboraOnline#6423 cache the following parts tiles,
+		// this will help avoiding the tear effect when switching to the next part
+		if (!tile && this._selectedPart !== coords.part && !this._tileCache[key]) {
+			tile = document.createElement('img');
+			if (img.rawData)
+				this._applyDelta(tile, img.rawData, img.isKeyframe);
+			else
+				tile.el = img;
+			this._tileCache[key] = tile.el;
 		}
 		L.Log.log(textMsg, 'INCOMING', key);
 

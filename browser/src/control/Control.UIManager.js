@@ -74,16 +74,27 @@ L.Control.UIManager = L.Control.extend({
 
 	loadLightMode: function() {
 		document.documentElement.setAttribute('data-theme','light');
+		this.setCanvasColorAfterModeChange();
 		this.map.fire('darkmodechanged');
 	},
 
 	loadDarkMode: function() {
 		document.documentElement.setAttribute('data-theme','dark');
+		this.setCanvasColorAfterModeChange();
 		this.map.fire('darkmodechanged');
 	},
 
 	getDarkModeState: function() {
-		return this.getSavedStateOrDefault('darkTheme', false);
+		return this.getSavedStateOrDefault('darkTheme', window.uiDefaults['darkTheme'] ?  window.uiDefaults['darkTheme'] : false);
+	},
+
+	setCanvasColorAfterModeChange: function() {
+		if (app.sectionContainer) {
+			app.sectionContainer.setBackgroundColorMode(false);
+			app.sectionContainer.setClearColor(window.getComputedStyle(document.documentElement).getPropertyValue('--color-canvas'));
+			//change back to it's default value after setting canvas color
+			app.sectionContainer.setBackgroundColorMode(true);
+		}
 	},
 
 	toggleDarkMode: function() {
@@ -106,8 +117,15 @@ L.Control.UIManager = L.Control.extend({
 			};
 			app.socket.sendMessage('uno .uno:ChangeTheme ' + JSON.stringify(cmd));
 		}
+		if (this.getCurrentMode() === 'classic' || this.map.isReadOnlyMode()) {
+			this.refreshMenubar();
+			this.refreshToolbar();
+		}
+		else {
+			this.refreshNotebookbar();
+		}
+		this.refreshSidebar();
 	},
-
 	initDarkModeFromSettings: function() {
 		var selectedMode = this.getDarkModeState();
 		if (selectedMode) {
@@ -119,6 +137,10 @@ L.Control.UIManager = L.Control.extend({
 		}
 		else {
 			this.loadLightMode();
+			var cmd = {
+				'NewTheme': { 'type': 'string', 'value': 'Light' }
+			};
+			app.socket.sendMessage('uno .uno:ChangeTheme ' + JSON.stringify(cmd));
 		}
 	},
 
@@ -399,12 +421,27 @@ L.Control.UIManager = L.Control.extend({
 		$('#map').addClass('notebookbar-opened');
 		this.insertCustomButtons();
 		this.map.sendInitUNOCommands();
+		if (this.map.getDocType() === 'presentation')
+			this.map.fire('toggleslidehide');
 	},
 
 	refreshMenubar: function() {
 		this.map.menubar._onRefresh();
 	},
+	refreshSidebar: function(ms) {
+		ms = ms !== undefined ? ms : 400;
+		setTimeout(function () {
+			var message = 'dialogevent ' +
+			    (window.sidebarId !== undefined ? window.sidebarId : -1) +
+			    ' {"id":"-1"}';
+			app.socket.sendMessage(message);
+		}, ms);
 
+	},
+	refreshToolbar: function() {
+		w2ui['editbar'].refresh();
+		w2ui['actionbar'].refresh();
+	},
 	addNotebookbarUI: function() {
 		this.refreshNotebookbar();
 		this.map._docLayer._resetClientVisArea();
@@ -483,7 +520,7 @@ L.Control.UIManager = L.Control.extend({
 				if (style.length == 0)
 					$('html > head').append('<style/>');
 				$('html > head > style').append('.w2ui-icon.' + encodeURIComponent(button.id) +
-					'{background: url("' + encodeURIComponent(button.imgurl) + '") no-repeat center !important; }');
+					'{background: url("' + encodeURI(button.imgurl) + '") no-repeat center !important; }');
 
 				// Position: Either specified by the caller, or defaulting to first position (before save)
 				var insertBefore = button.insertBefore || 'save';
@@ -582,6 +619,7 @@ L.Control.UIManager = L.Control.extend({
 		var obj = $('.unfold');
 		obj.removeClass('w2ui-icon unfold');
 		obj.addClass('w2ui-icon fold');
+
 	},
 
 	hideMenubar: function() {
@@ -595,6 +633,7 @@ L.Control.UIManager = L.Control.extend({
 		var obj = $('.fold');
 		obj.removeClass('w2ui-icon fold');
 		obj.addClass('w2ui-icon unfold');
+
 	},
 
 	isMenubarHidden: function() {
@@ -764,7 +803,7 @@ L.Control.UIManager = L.Control.extend({
 		var userPrivateInfo = this.map._docLayer ? this.map._viewInfo[this.map._docLayer._viewId].userprivateinfo : null;
 		if (userPrivateInfo) {
 			var apiKey = userPrivateInfo.ZoteroAPIKey;
-			if (apiKey !== undefined) {
+			if (apiKey !== undefined && !this.map.zotero) {
 				this.map.zotero = L.control.zotero(this.map);
 				this.map.zotero.apiKey = apiKey;
 				this.map.addControl(this.map.zotero);
@@ -1090,7 +1129,7 @@ L.Control.UIManager = L.Control.extend({
 				vertical: false,
 				layoutstyle: 'end'
 			},
-		]);
+		], 'input-modal-input');
 
 		var that = this;
 		this.showModal(json, [
@@ -1283,6 +1322,10 @@ L.Control.UIManager = L.Control.extend({
 			// no saved state; must check the UIDefaults
 			if (window.uiDefaults && window.uiDefaults[docType])
 				retval = window.uiDefaults[docType][name];
+
+			// check UIDefaults root without limiting to the doctype
+			if (retval === undefined || retval === null)
+				retval = window.uiDefaults[name];
 
 			if (retval === undefined || retval === null) {
 				if (forcedDefault !== undefined)

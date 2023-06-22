@@ -384,6 +384,7 @@ namespace Util
                     break;
                 }
             }
+            fclose(file);
         }
 
         return totalMemKb;
@@ -499,6 +500,7 @@ namespace Util
                         pos = s.find(' ', pos + 1);
                     }
                 }
+                fclose(fp);
             }
         }
         return 0;
@@ -528,7 +530,7 @@ namespace Util
             std::string::size_type pos = 0;
             while ((pos = result.find(a, pos)) != std::string::npos)
             {
-                result = result.replace(pos, aSize, b);
+                result.replace(pos, aSize, b);
                 pos += bSize; // Skip the replacee to avoid endless recursion.
             }
         }
@@ -1235,6 +1237,19 @@ namespace Util
         }
 
         return std::string();
+    }
+
+    void assertCorrectThread(std::thread::id owner, const char* fileName, int lineNo)
+    {
+        // uninitialized owner means detached and can be invoked by any thread.
+        const bool sameThread = (owner == std::thread::id() || owner == std::this_thread::get_id());
+        if (!sameThread)
+            LOG_ERR("Incorrect thread affinity. Expected: "
+                    << Log::to_string(owner) << " but called from "
+                    << Log::to_string(std::this_thread::get_id()) << " (" << Util::getThreadId()
+                    << "). (" << fileName << ":" << lineNo << ")");
+
+        assert(sameThread);
     }
 }
 

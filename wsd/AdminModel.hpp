@@ -55,6 +55,17 @@ private:
 
 struct DocCleanupSettings
 {
+    DocCleanupSettings()
+        : _enable(false)
+        , _cleanupInterval(0)
+        , _badBehaviorPeriod(0)
+        , _idleTime(0)
+        , _limitDirtyMem(0)
+        , _limitCpu(0)
+        , _lostKitGracePeriod(0)
+    {
+    }
+
     void setEnable(bool enable) { _enable = enable; }
     bool getEnable() const { return _enable; }
     void setCleanupInterval(size_t cleanupInterval) { _cleanupInterval = cleanupInterval; }
@@ -82,6 +93,14 @@ private:
 
 struct DocProcSettings
 {
+    DocProcSettings()
+        : _limitVirtMemMb(0)
+        , _limitStackMemKb(0)
+        , _limitFileSizeMb(0)
+        , _limitNumberOpenFiles(0)
+    {
+    }
+
     void setLimitVirtMemMb(size_t limitVirtMemMb) { _limitVirtMemMb = limitVirtMemMb; }
     size_t getLimitVirtMemMb() const { return _limitVirtMemMb; }
     void setLimitStackMemKb(size_t limitStackMemKb) { _limitStackMemKb = limitStackMemKb; }
@@ -329,10 +348,6 @@ public:
 
     /// All methods here must be called from the Admin socket-poll
     void setThreadOwner(const std::thread::id &id) { _owner = id; }
-
-    /// In debug mode check that code is running in the correct thread.
-    /// Asserts in the debug builds, otherwise just logs.
-    void assertCorrectThread() const;
 
     std::string query(const std::string& command);
     std::string getAllHistory() const;

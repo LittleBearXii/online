@@ -415,7 +415,7 @@ L.Control.NotebookbarImpress = L.Control.NotebookbarWriter.extend({
 			},
 			{
 				'type': 'bigtoolitem',
-				'text': _UNO('.uno:SlideMasterPage', 'presentation'),
+				'text': _('Master View'),
 				'command': '.uno:SlideMasterPage'
 			},
 			{
@@ -426,7 +426,7 @@ L.Control.NotebookbarImpress = L.Control.NotebookbarWriter.extend({
 			{
 				'type': 'bigtoolitem',
 				'text': _UNO('.uno:Sidebar'),
-				'command': '.uno:Sidebar'
+				'command': '.uno:SidebarDeck.PropertyDeck'
 			}
 		];
 
@@ -986,12 +986,12 @@ L.Control.NotebookbarImpress = L.Control.NotebookbarWriter.extend({
 							{
 								'type': 'toolitem',
 								'text': _UNO('.uno:InsertSlideField', 'presentation'),
-								'command': '.uno:InsertSlideField'
+								'command': '.uno:InsertPageField'
 							},
 							{
 								'type': 'toolitem',
 								'text': _UNO('.uno:InsertSlidesField', 'presentation'),
-								'command': '.uno:InsertSlidesField'
+								'command': '.uno:InsertPagesField'
 							}
 						]
 					},
@@ -1011,7 +1011,7 @@ L.Control.NotebookbarImpress = L.Control.NotebookbarWriter.extend({
 							{
 								'type': 'toolitem',
 								'text': _UNO('.uno:InsertSlideTitleField', 'presentation'),
-								'command': '.uno:InsertSlideTitleField'
+								'command': '.uno:InsertPageTitleField'
 							}
 						]
 					}
@@ -1132,6 +1132,18 @@ L.Control.NotebookbarImpress = L.Control.NotebookbarWriter.extend({
 				'command': '.uno:InsertPage'
 			},
 			{
+				'id': 'showslide',
+				'type': 'bigmenubartoolitem',
+				'text': _UNO('.uno:ShowSlide', 'presentation'),
+				'command': '.uno:ShowSlide'
+			},
+			{
+				'id': 'hideslide',
+				'type': 'bigmenubartoolitem',
+				'text': _UNO('.uno:HideSlide', 'presentation'),
+				'command': '.uno:HideSlide'
+			},
+			{
 				'type': 'container',
 				'children': [
 					{
@@ -1169,11 +1181,6 @@ L.Control.NotebookbarImpress = L.Control.NotebookbarWriter.extend({
 				'command': '.uno:MasterSlidesPanel'
 			},
 			{
-				'type': 'bigtoolitem',
-				'text': _UNO('.uno:Navigator'),
-				'command': '.uno:Navigator'
-			},
-			{
 				'type': 'container',
 				'children': [
 					{
@@ -1198,6 +1205,11 @@ L.Control.NotebookbarImpress = L.Control.NotebookbarWriter.extend({
 					}
 				],
 				'vertical': 'true'
+			},
+			{
+				'type': 'bigtoolitem',
+				'text': _UNO('.uno:Navigator'),
+				'command': '.uno:Navigator'
 			},
 			{
 				'type': 'bigtoolitem',

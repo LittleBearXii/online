@@ -31,9 +31,7 @@
 
 #include <memory.h>
 
-#ifndef __linux__
 #include <thread>
-#endif
 
 #include <Poco/File.h>
 #include <Poco/Path.h>
@@ -153,7 +151,7 @@ namespace Util
             if ((offset + i) >= buffer.size())
                 break;
 
-            sprintf(scratch, "%.2x", static_cast<unsigned char>(buffer[offset + i]));
+            snprintf(scratch, sizeof(scratch), "%.2x", static_cast<unsigned char>(buffer[offset + i]));
             os << scratch;
         }
 
@@ -263,6 +261,7 @@ namespace Util
     void setProcessAndThreadPriorities(const pid_t pid, int prio);
 #endif
 
+    /// Replace substring @a in string @s with string @b.
     std::string replace(std::string s, const std::string& a, const std::string& b);
 
     std::string formatLinesForLog(const std::string& s);
@@ -452,7 +451,7 @@ namespace Util
         os << legend;
         for (j = 0; j < buffer.size() + width - 1; j += width)
         {
-            sprintf (scratch, "%s0x%.4x  ", prefix, j);
+            snprintf (scratch, sizeof(scratch), "%s0x%.4x  ", prefix, j);
             os << scratch;
 
             std::string line = stringifyHexLine(buffer, j, width);
@@ -1056,7 +1055,7 @@ int main(int argc, char**argv)
     inline void vectorAppendHex(std::vector<char> &vector, uint64_t number)
     {
         char output[32];
-        sprintf(output, "%" PRIx64, number);
+        snprintf(output, sizeof(output), "%" PRIx64, number);
         vectorAppend(vector, output);
     }
 
@@ -1448,6 +1447,16 @@ int main(int argc, char**argv)
         object.dumpState(oss, indent);
         return oss.str().substr(indent.size());
     }
+
+    /// Asserts in the debug builds, otherwise just logs.
+    void assertCorrectThread(std::thread::id owner, const char* fileName, int lineNo);
+
+#ifndef ASSERT_CORRECT_THREAD
+#define ASSERT_CORRECT_THREAD() assertCorrectThread(__FILE__, __LINE__)
+#endif
+#ifndef ASSERT_CORRECT_THREAD_OWNER
+#define ASSERT_CORRECT_THREAD_OWNER(OWNER) Util::assertCorrectThread(OWNER, __FILE__, __LINE__)
+#endif
 
     /**
      * Similar to std::atoi() but does not require p to be null-terminated.

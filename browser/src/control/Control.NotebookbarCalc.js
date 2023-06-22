@@ -1052,8 +1052,13 @@ L.Control.NotebookbarCalc = L.Control.NotebookbarWriter.extend({
 			{
 				'type': 'bigtoolitem',
 				'text': _UNO('.uno:Sidebar'),
-				'command': '.uno:Sidebar'
-			}
+				'command': '.uno:SidebarDeck.PropertyDeck'
+			},
+			{
+				'type': 'bigtoolitem',
+				'text': _UNO('.uno:Navigator'),
+				'command': '.uno:Navigator'
+			},
 		];
 
 		return this.getTabPage('View', content);
@@ -1146,6 +1151,32 @@ L.Control.NotebookbarCalc = L.Control.NotebookbarWriter.extend({
 				'text': _('Smart Picker'),
 				'command': 'remotelink'
 			} : {},
+            {
+                'type': 'container',
+                'children': [
+                    {
+                        'type': 'toolbox',
+                        'children': [
+                            {
+                                'type': 'toolitem',
+                                'text': _UNO('.uno:InsertCurrentDate', 'spreadsheet'),
+                                'command': '.uno:InsertCurrentDate'
+                            }
+                        ]
+                    },
+                    {
+                        'type': 'toolbox',
+                        'children': [
+                            {
+                                'type': 'toolitem',
+                                'text': _UNO('.uno:InsertCurrentTime', 'spreadsheet'),
+                                'command': '.uno:InsertCurrentTime'
+                            }
+                        ]
+                    }
+                ],
+                'vertical': 'true'
+            },
 			{
 				'id': 'Insert-Section-NameRangesTable-Ext',
 				'type': 'container',
@@ -1482,6 +1513,7 @@ L.Control.NotebookbarCalc = L.Control.NotebookbarWriter.extend({
 			},
 			{
 				'id': 'Review-Section-Language1',
+				'type': 'container',
 				'children': [
 					{
 						'id': 'LineA19',

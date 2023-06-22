@@ -337,20 +337,10 @@ public:
     const std::thread::id& getThreadOwner() const { return _owner; }
 
     /// Asserts in the debug builds, otherwise just logs.
-    void assertCorrectThread(const char* fileName, int lineNo)
+    void assertCorrectThread(const char* fileName = "", int lineNo = 0) const
     {
-        if (InhibitThreadChecks)
-            return;
-        // uninitialized owner means detached and can be invoked by any thread.
-        const bool sameThread = (_owner == std::thread::id() || std::this_thread::get_id() == _owner);
-        if (!sameThread)
-            LOG_ERR("Invoked from foreign thread. Expected: "
-                    << Log::to_string(_owner) << " but called from "
-                    << Log::to_string(std::this_thread::get_id()) << " (" << Util::getThreadId()
-                    << ")"
-                    << " (" << fileName << ":" << lineNo << ")");
-
-        // assert(sameThread);
+        if (!InhibitThreadChecks)
+            Util::assertCorrectThread(_owner, fileName, lineNo);
     }
 
     bool ignoringInput() const { return _ignoreInput; }
@@ -564,7 +554,8 @@ class InputProcessingManager
 {
 public:
     InputProcessingManager(const std::shared_ptr<ProtocolHandlerInterface> &protocol, bool inputProcess)
-    : _protocol(protocol)
+        : _protocol(protocol)
+        , _prevInputProcess(false)
     {
         if (_protocol)
         {
@@ -645,18 +636,10 @@ public:
 
     /// Are we running in either shutdown, or the polling thread.
     /// Asserts in the debug builds, otherwise just logs.
-    void assertCorrectThread() const
+    void assertCorrectThread(const char* fileName = "?", int lineNo = 0) const
     {
-        if (InhibitThreadChecks)
-            return;
-        // uninitialized owner means detached and can be invoked by any thread.
-        const bool sameThread = (!isAlive() || _owner == std::thread::id() || std::this_thread::get_id() == _owner);
-        if (!sameThread)
-            LOG_ERR("Incorrect thread affinity for "
-                    << _name << ". Expected: " << _owner << " (" << Util::getThreadId()
-                    << ") but called from " << std::this_thread::get_id() << ", stop: " << _stop);
-
-        assert(_stop || sameThread);
+        if (!InhibitThreadChecks && isAlive())
+            Util::assertCorrectThread(_owner, fileName, lineNo);
     }
 
     /// Kit poll can be called from LOK's Yield in any thread, adapt to that.
@@ -736,8 +719,10 @@ public:
             newSocket->resetThreadOwner();
 
             std::lock_guard<std::mutex> lock(_mutex);
+            const bool wasEmpty = _newSockets.empty() && _newCallbacks.empty();
             _newSockets.emplace_back(std::move(newSocket));
-            wakeup();
+            if (wasEmpty)
+                wakeup();
         }
     }
 
@@ -764,7 +749,7 @@ public:
     void addCallback(const CallbackFn& fn)
     {
         std::lock_guard<std::mutex> lock(_mutex);
-        bool wasEmpty = _newCallbacks.empty();
+        const bool wasEmpty = _newSockets.empty() && _newCallbacks.empty();
         _newCallbacks.emplace_back(fn);
         if (wasEmpty)
             wakeup();
@@ -774,7 +759,7 @@ public:
 
     size_t getSocketCount() const
     {
-        assertCorrectThread();
+        ASSERT_CORRECT_THREAD();
         return _pollSockets.size();
     }
 
@@ -1600,7 +1585,8 @@ private:
     bool _sentHTTPContinue;
 
     /// True when shutdown was requested via shutdown().
-    bool _shutdownSignalled;
+    /// It's accessed from different threads.
+    std::atomic_bool _shutdownSignalled;
     int _incomingFD;
     ReadType _readType;
     std::atomic_bool _inputProcessingEnabled;

@@ -43,6 +43,8 @@ L.Control.JSDialogBuilder = L.Control.extend({
 	_menus: null,
 	_colorPickers: null,
 	_colorLastSelection: {},
+	_decimal: '.',
+	_minusSign: '-',
 
 	// Responses are included in a parent container. While buttons are created, responses need to be checked.
 	// So we save the button ids and responses to check them later.
@@ -251,6 +253,21 @@ L.Control.JSDialogBuilder = L.Control.extend({
 		];
 
 		this._currentDepth = 0;
+
+		if (typeof Intl !== 'undefined') {
+			var formatter = new Intl.NumberFormat(L.Browser.lang);
+			var that = this;
+			formatter.formatToParts(-11.1).map(function(item) {
+				switch (item.type) {
+				case 'decimal':
+					that._decimal = item.value;
+					break;
+				case 'minusSign':
+					that._minusSign = item.value;
+					break;
+				}
+			});
+		}
 	},
 
 	isContainerType: function(type) {
@@ -283,6 +300,25 @@ L.Control.JSDialogBuilder = L.Control.extend({
 		builder.postProcess(parentContainer, data);
 
 		return false;
+	},
+
+	_preventNonNumericalInput: function(e) {
+		e = e || window.event;
+		var charCode = (typeof e.which == 'undefined') ? e.keyCode : e.which;
+		var charStr = String.fromCharCode(charCode);
+		var regex = new RegExp('^[0-9\\' + this._decimal + '\\' + this._minusSign + ']+$');
+		if (!charStr.match(regex))
+			return e.preventDefault();
+
+		var value = e.target.value;
+		if (!value)
+			return e.preventDefault();
+
+		// no dup
+		if (this._decimal === charStr || this._minusSign === charStr) {
+			if (value.indexOf(charStr) > -1)
+				return e.preventDefault();
+		}
 	},
 
 	// by default send new state to the core
@@ -350,14 +386,33 @@ L.Control.JSDialogBuilder = L.Control.extend({
 			unit.textContent = builder._unitToVisibleString(data.unit);
 		}
 
+		var getPrecision = function (data) {
+			data = Math.abs(data);
+			var counter = 1;
+
+			while (Math.floor(data * counter) < (data * counter))
+				counter *= 10;
+
+			return 1/counter;
+		};
+
 		if (data.min != undefined)
 			$(spinfield).attr('min', data.min);
 
 		if (data.max != undefined)
 			$(spinfield).attr('max', data.max);
 
-		if (data.step != undefined)
-			$(spinfield).attr('step', data.step);
+		if (data.step != undefined) {
+			// we don't want to show error popups due to browser step validation
+			// so be sure all the values will be acceptted, check only precision
+			var step = getPrecision(data.step);
+			var minStep = getPrecision(data.min);
+			var maxStep = getPrecision(data.max);
+
+			step = Math.min(step, minStep, maxStep);
+
+			$(spinfield).attr('step', step);
+		}
 
 		if (data.enabled === 'false' || data.enabled === false) {
 			$(spinfield).attr('disabled', 'disabled');
@@ -726,17 +781,15 @@ L.Control.JSDialogBuilder = L.Control.extend({
 		case 'SdTableDesignPanel':
 		case 'ChartTypePanel':
 		case 'rotation':
-			iconURL = L.LOUtil.getImageURL('lc_'+ sectionTitle.id.toLowerCase() +'.svg');
+			iconURL = L.LOUtil.getImageURL('lc_'+ sectionTitle.id.toLowerCase() +'.svg', builder.map.getDocType());
 			break;
 		}
 		if (iconURL) {
 			var icon = L.DomUtil.create('img', 'menu-entry-icon', leftDiv);
-			icon.src = iconURL;
+			L.LOUtil.setImage(icon, iconURL.split('/').pop(), builder.map.getDocType());
 			icon.alt = '';
 			titleClass = 'menu-entry-with-icon';
-			icon.addEventListener('error', function() {
-				icon.style.display = 'none';
-			});
+
 		}
 		var titleSpan = L.DomUtil.create('span', titleClass, leftDiv);
 
@@ -841,6 +894,7 @@ L.Control.JSDialogBuilder = L.Control.extend({
 			var container = L.DomUtil.create('div', 'ui-expander-container ' + builder.options.cssClass, parentContainer);
 			container.id = data.id;
 
+			var expanded = data.expanded === true || (data.children[0] && data.children[0].checked === true);
 			if (data.children[0].text && data.children[0].text !== '') {
 				var expander = L.DomUtil.create('div', 'ui-expander ' + builder.options.cssClass, container);
 				expander.tabIndex = '0';
@@ -851,7 +905,7 @@ L.Control.JSDialogBuilder = L.Control.extend({
 					L.DomUtil.addClass(label, 'hidden');
 				builder.postProcess(expander, data.children[0]);
 
-				if (data.children.length > 1)
+				if (data.children.length > 1 && expanded)
 					$(label).addClass('expanded');
 
 				var toggleFunction = function () {
@@ -873,7 +927,9 @@ L.Control.JSDialogBuilder = L.Control.extend({
 			}
 
 			var expanderChildren = L.DomUtil.create('div', 'ui-expander-content ' + builder.options.cssClass, container);
-			$(expanderChildren).addClass('expanded');
+
+			if (expanded)
+				$(expanderChildren).addClass('expanded');
 
 			var children = [];
 			var startPos = 1;
@@ -884,13 +940,12 @@ L.Control.JSDialogBuilder = L.Control.extend({
 			}
 
 			for (var i = startPos; i < data.children.length; i++) {
+				if (data.children[i].visible === false)
+					data.children[i].visible = true;
 				children.push(data.children[i]);
 			}
 
 			builder.build(expanderChildren, children);
-
-			if (data.expanded === false)
-				$(expander).click();
 		} else {
 			return true;
 		}
@@ -940,12 +995,8 @@ L.Control.JSDialogBuilder = L.Control.extend({
 			var iconSpan = L.DomUtil.create('span', 'menu-entry-icon ' + iconName, sectionTitle);
 			var iconURL = builder._createIconURL(iconName, true);
 			icon = L.DomUtil.create('img', '', iconSpan);
-			icon.src = iconURL;
+			L.LOUtil.setImage(icon, iconURL.split('/').pop(), builder.map.getDocType());
 			icon.alt = '';
-			icon.addEventListener('error', function() {
-				icon.style.display = 'none';
-			});
-
 			var titleSpan2 = L.DomUtil.create('span', 'menu-entry-with-icon flex-fullwidth', sectionTitle);
 			titleSpan2.innerHTML = title;
 		}
@@ -1062,12 +1113,12 @@ L.Control.JSDialogBuilder = L.Control.extend({
 				if (i !== t)
 				{
 					$(tabs[i]).removeClass('selected');
-					$(contentDivs[i]).hide();
+					$(contentDivs[i]).addClass('hidden');
 					tabs[i].setAttribute('aria-selected', 'false');
 					tabs[i].tabIndex = -1;
 				}
 			}
-			$(contentDivs[t]).show();
+			$(contentDivs[t]).removeClass('hidden');
 			builder.wizard.selectedTab(tabIds[t]);
 		};
 	},
@@ -1140,7 +1191,7 @@ L.Control.JSDialogBuilder = L.Control.extend({
 				contentDiv.setAttribute('role', 'tabpanel');
 
 				if (!isSelectedTab)
-					$(contentDiv).hide();
+					$(contentDiv).addClass('hidden');
 				contentDivs[tabIdx] = contentDiv;
 			}
 
@@ -1507,6 +1558,9 @@ L.Control.JSDialogBuilder = L.Control.extend({
 		}
 
 		controls = builder._controlHandlers['basespinfield'](parentContainer, data, builder, customCallback);
+		if (!L.Browser.cypressTest && !L.Browser.chrome) {
+			controls.spinfield.onkeypress = L.bind(builder._preventNonNumericalInput, builder);
+		}
 
 		builder.listenNumericChanges(data, builder, controls, customCallback);
 
@@ -1520,6 +1574,10 @@ L.Control.JSDialogBuilder = L.Control.extend({
 	_metricfieldControl: function(parentContainer, data, builder, customCallback) {
 		var value;
 		var controls = builder._controlHandlers['basespinfield'](parentContainer, data, builder, customCallback);
+		if (!L.Browser.cypressTest && !L.Browser.chrome) {
+			controls.spinfield.onkeypress = L.bind(builder._preventNonNumericalInput, builder);
+		}
+
 		builder.listenNumericChanges(data, builder, controls, customCallback);
 
 		value = parseFloat(data.value);
@@ -1576,27 +1634,26 @@ L.Control.JSDialogBuilder = L.Control.extend({
 		pushbutton.id = data.id;
 		builder._setAccessKey(pushbutton, builder._getAccessKeyFromText(data.text));
 		var pushbuttonText = builder._customPushButtonTextForId(data.id) !== '' ? builder._customPushButtonTextForId(data.id) : builder._cleanText(data.text);
-
+		var image;
 		if (data.image && pushbuttonText !== '') {
 			L.DomUtil.addClass(pushbutton, 'has-img d-flex align-content-center justify-content-center align-items-center');
-			var image = L.DomUtil.create('img', '', pushbutton);
+			image = L.DomUtil.create('img', '', pushbutton);
 			image.src = data.image;
 			var text = L.DomUtil.create('span', '', pushbutton);
 			text.innerText = pushbuttonText;
 			builder._stressAccessKey(text, pushbutton.accessKey);
 		} else if (data.image) {
 			L.DomUtil.addClass(pushbutton, 'has-img d-flex align-content-center justify-content-center align-items-center');
-			var image = L.DomUtil.create('img', '', pushbutton);
+			image = L.DomUtil.create('img', '', pushbutton);
 			image.src = data.image;
 		} else if (data.symbol) {
 			L.DomUtil.addClass(pushbutton, 'has-img d-flex align-content-center justify-content-center align-items-center');
-			var image = L.DomUtil.create('img', '', pushbutton);
-			image.src = L.LOUtil.getImageURL('symbol_' + data.symbol + '.svg');
+			image = L.DomUtil.create('img', '', pushbutton);
+			L.LOUtil.setImage(image, 'symbol_' + data.symbol + '.svg', builder.map.getDocType());
 		} else {
 			pushbutton.innerText = pushbuttonText;
 			builder._stressAccessKey(pushbutton, pushbutton.accessKey);
 		}
-
 		if (data.enabled === 'false' || data.enabled === false)
 			$(pushbutton).prop('disabled', true);
 
@@ -1862,13 +1919,13 @@ L.Control.JSDialogBuilder = L.Control.extend({
 			if (image) {
 				image = image.substr(0, image.lastIndexOf('.'));
 				image = image.substr(image.lastIndexOf('/') + 1);
-				image = 'url("' + L.LOUtil.getImageURL(image + '.svg') + '")';
+				image = 'url("' + L.LOUtil.getImageURL(image + '.svg', builder.map.getDocType()) + '")';
 			}
 
 			if (image64) {
 				image = 'url("' + image64 + '")';
 			}
-
+			L.LOUtil.checkIfImageExists(image);
 			elem = L.DomUtil.create('div', 'layout ' +
 				(data.entries[index].selected ? ' cool-context-down' : ''), parentContainer);
 			$(elem).data('id', data.entries[index].id);
@@ -2133,8 +2190,9 @@ L.Control.JSDialogBuilder = L.Control.extend({
 		L.DomUtil.addClass(parentContainer, 'content-has-no-comments');
 		var emptyCommentWizard = L.DomUtil.create('figure', 'empty-comment-wizard-container', parentContainer);
 		var imgNode = L.DomUtil.create('img', 'empty-comment-wizard-img', emptyCommentWizard);
-		imgNode.src = L.LOUtil.getImageURL('lc_showannotations.svg');
+		L.LOUtil.setImage(imgNode, 'lc_showannotations.svg', builder.map.getDocType());
 		imgNode.alt = data.text;
+
 		var textNode = L.DomUtil.create('figcaption', 'empty-comment-wizard', emptyCommentWizard);
 		textNode.innerText = data.text;
 		L.DomUtil.create('br', 'empty-comment-wizard', textNode);
@@ -2163,6 +2221,7 @@ L.Control.JSDialogBuilder = L.Control.extend({
 		}
 
 		var iconURLAliases = {
+			'addmb-menu': 'ok',
 			'closetablet': 'view',
 			'defineprintarea': 'menuprintranges',
 			'deleteprintarea': 'delete',
@@ -2321,12 +2380,17 @@ L.Control.JSDialogBuilder = L.Control.extend({
 			'zoteroaddeditbibliography': 'addeditbibliography',
 			'zoterosetdocprefs': 'formproperties',
 			'sidebardeck.propertydeck' : 'sidebar',
+			// Fix issue #6145 by adding aliases for the PDF and EPUB icons
+			// The fix for issues #6103 and #6104 changes the name of these
+			// icons so map the new names to the old names.
+			'downloadas-pdf': 'exportpdf',
+			'downloadas-epub': 'exportepub',
 		};
 		if (iconURLAliases[cleanName]) {
 			cleanName = iconURLAliases[cleanName];
 		}
 
-		return L.LOUtil.getImageURL('lc_' + cleanName + '.svg');
+		return L.LOUtil.getImageURL('lc_' + cleanName + '.svg', this.map.getDocType());
 	},
 
 	// make a class identifier from parent's id by walking up the tree
@@ -2422,7 +2486,6 @@ L.Control.JSDialogBuilder = L.Control.extend({
 			buttonImage.src = imagePath;
 
 			controls['button'] = button;
-
 			if (builder.options.noLabelsForUnoButtons !== true) {
 				var label = L.DomUtil.create('label', 'ui-content unolabel', button);
 				label.htmlFor = buttonId;
@@ -2498,6 +2561,8 @@ L.Control.JSDialogBuilder = L.Control.extend({
 				$(button).addClass('selected');
 				$(div).addClass('selected');
 			}
+			L.LOUtil.checkIfImageExists(buttonImage);
+
 		} else {
 			button = L.DomUtil.create('label', 'ui-content unolabel', div);
 			button.textContent = builder._cleanText(data.text);
@@ -2798,9 +2863,8 @@ L.Control.JSDialogBuilder = L.Control.extend({
 
 		var buttonId = 'border-' + i;
 		button = L.DomUtil.create('img', 'ui-content borderbutton', div);
-		button.src = L.LOUtil.getImageURL('fr0' + i + '.svg');
+		L.LOUtil.setImage(button, 'fr0' + i + '.svg', builder.map.getDocType());
 		button.id = buttonId;
-
 		if (selected)
 			$(button).addClass('selected');
 
@@ -2867,9 +2931,8 @@ L.Control.JSDialogBuilder = L.Control.extend({
 
 			var icon = builder._createIconURL(data.command);
 			var buttonId = id + 'img';
-
 			var button = L.DomUtil.create('img', 'ui-content unobutton', div);
-			button.src = icon;
+			L.LOUtil.setImage(button, icon.split('/').pop(), builder.map.getDocType());
 			button.id = buttonId;
 			button.setAttribute('alt', id);
 
@@ -2906,7 +2969,10 @@ L.Control.JSDialogBuilder = L.Control.extend({
 				if (!colorToApply || colorToApply === '#')
 					return;
 
-				var color = colorToApply.indexOf('#') === 0 ? colorToApply.substr(1) : colorToApply;
+				var color = -1;
+				if (colorToApply !== -1)
+					color = colorToApply.indexOf('#') === 0 ? colorToApply.substr(1) : colorToApply;
+
 				builder._sendColorCommand(builder, data, color);
 			};
 
@@ -2926,6 +2992,28 @@ L.Control.JSDialogBuilder = L.Control.extend({
 							}
 						}
 					});
+
+					if (data.command === '.uno:FontColor' || data.command === '.uno:Color') {
+						var autoColorButton = document.createElement('button');
+						autoColorButton.textContent = _('Automatic');
+						autoColorButton.classList.add('auto-color-button');
+
+						autoColorButton.onclick = function() {
+							updateFunction(-1);
+							builder.map['stateChangeHandler'].setItemValue(data.command, -1);
+
+							var parameters;
+							if (data.command === '.uno:FontColor')
+								parameters = { FontColor: { type: 'long', value: -1 } };
+							else
+								parameters = { Color: { type: 'long', value: -1 } };
+							builder.map.sendUnoCommand(data.command, parameters);
+							document.getElementById('document-container').click();
+						}.bind(this);
+
+						var colorDiv = document.getElementById('w2ui-overlay');
+						colorDiv.insertBefore(autoColorButton, colorDiv.firstChild);
+					}
 				}
 			});
 			builder._preventDocumentLosingFocusOnClick(div);
@@ -2971,11 +3059,8 @@ L.Control.JSDialogBuilder = L.Control.extend({
 			var iconSpan = L.DomUtil.create('span', 'menu-entry-icon ' + iconName, menuEntry);
 			var iconURL = builder._createIconURL(iconName, true);
 			icon = L.DomUtil.create('img', '', iconSpan);
-			icon.src = iconURL;
+			L.LOUtil.setImage(icon, iconURL.split('/').pop(), builder.map.getDocType());
 			icon.alt = '';
-			icon.addEventListener('error', function() {
-				icon.style.display = 'none';
-			});
 		}
 		if (data.checked && data.checked === true) {
 			L.DomUtil.addClass(menuEntry, 'menu-entry-checked');

@@ -1,3 +1,5 @@
+if ENABLE_TESTS
+
 # Cap threadpools to 4 threads.
 export MAX_CONCURRENCY=4
 AUTOMAKE_OPTION = serial-tests
@@ -28,50 +30,50 @@ AM_CXXFLAGS = $(CPPUNIT_CFLAGS) -DTDOC=\"$(abs_top_srcdir)/test/data\" \
 # 'Finished in' in the `make check` output.
 # When adding new tests, please maintain order.
 all_la_unit_tests = \
-	unit-tiletest.la \
 	unit-wopi-async-slow.la \
+	unit-tiletest.la \
 	unit-wopi-fail-upload.la \
 	unit-each-view.la \
 	unit-wopi-stuck-save.la \
+	unit-load.la \
+	unit-integration.la \
+	unit-httpws.la \
+	unit-quarantine.la \
 	unit-load-torture.la \
 	unit-copy-paste.la \
-	unit-httpws.la \
 	unit-crash.la \
 	unit-wopi-fileurl.la \
 	unit-wopi-save-on-exit.la \
-	unit-integration.la \
-	unit-insert-delete.la \
-	unit-password-protected.la \
-	unit-wopi-ownertermination.la \
 	unit-wopi-documentconflict.la \
 	unit-close.la \
+	unit-wopi-languages.la \
+	unit-insert-delete.la \
+	unit-password-protected.la \
 	unit-uno-command.la \
 	unit-wopi-httpredirect.la \
-	unit-wopi-httpheaders.la \
+	unit-calc.la \
 	unit-http.la \
 	unit-wopi-temp.la \
-	unit-wopi.la \
 	unit_wopi_watermark.la \
+	unit-session.la \
+	unit-render-shape.la \
+	unit-wopi-lock.la \
+	unit-wopi-ownertermination.la \
+	unit-wopi-httpheaders.la \
+	unit-wopi.la \
 	unit-wopi-crash-modified.la \
 	unit-oauth.la \
-	unit-calc.la \
-	unit-wopi-languages.la \
 	unit-wopi-versionrestore.la \
 	unit-convert.la \
 	unit-rendering-options.la \
 	unit-paste.la \
 	unit-large-paste.la \
 	unit-typing.la \
-	unit-wopi-httpredirectloop.la \
-	unit-render-shape.la \
 	unit-cursor.la \
-	unit-session.la \
-	unit-wopi-lock.la \
 	unit-wopi-unlock.la \
 	unit-render-search-result.la \
 	unit-tiff-load.la \
 	unit-wopi-saveas-with-encoded-file-name.la \
-	unit-load.la \
 	unit-storage.la \
 	unit-wopi-async-upload-modifyclose.la \
 	unit-wopi-saveas.la \
@@ -92,7 +94,12 @@ endif
 noinst_LTLIBRARIES = ${all_la_unit_tests}
 
 MAGIC_TO_FORCE_SHLIB_CREATION = -rpath /dummy
-AM_LDFLAGS = -pthread -module $(MAGIC_TO_FORCE_SHLIB_CREATION) $(ZLIB_LIBS) $(ZSTD_LIBS) ${PNG_LIBS}
+AM_LDFLAGS = -module $(MAGIC_TO_FORCE_SHLIB_CREATION) $(ZLIB_LIBS) $(ZSTD_LIBS) ${PNG_LIBS}
+
+# Clang's linker doesn't like -pthread.
+if !HAVE_CLANG
+AM_LDFLAGS += -pthread
+endif
 
 if ENABLE_SSL
 AM_LDFLAGS += ${OPENSSL_LIBS}
@@ -248,8 +255,6 @@ unit_wopi_httpheaders_la_SOURCES = UnitWOPIHttpHeaders.cpp
 unit_wopi_httpheaders_la_LIBADD = $(CPPUNIT_LIBS)
 unit_wopi_httpredirect_la_SOURCES = UnitWOPIHttpRedirect.cpp
 unit_wopi_httpredirect_la_LIBADD = $(CPPUNIT_LIBS)
-unit_wopi_httpredirectloop_la_SOURCES = UnitWOPIHttpRedirectLoop.cpp
-unit_wopi_httpredirectloop_la_LIBADD = $(CPPUNIT_LIBS)
 unit_tiff_load_la_SOURCES = UnitTiffLoad.cpp
 unit_tiff_load_la_LIBADD = $(CPPUNIT_LIBS)
 unit_large_paste_la_SOURCES = UnitLargePaste.cpp
@@ -286,6 +291,8 @@ unit_bad_doc_load_la_SOURCES = UnitBadDocLoad.cpp
 unit_bad_doc_load_la_LIBADD = $(CPPUNIT_LIBS)
 unit_hosting_la_SOURCES = UnitHosting.cpp
 unit_hosting_la_LIBADD = $(CPPUNIT_LIBS)
+unit_quarantine_la_SOURCES = UnitQuarantine.cpp
+unit_quarantine_la_LIBADD = $(CPPUNIT_LIBS)
 
 if HAVE_LO_PATH
 SYSTEM_STAMP = @SYSTEMPLATE_PATH@/system_stamp
@@ -312,7 +319,7 @@ TEST_EXTENSIONS = .la
 LA_LOG_DRIVER = ${top_builddir}/test/run_unit.sh
 LOG_DRIVER = ${top_builddir}/test/run_unit_standalone.sh
 
-EXTRA_DIST = data/delta-text.png data/delta-text2.png data/hello.odt data/hello.txt $(test_SOURCES) $(unittest_SOURCES) run_unit.sh run_unit_standalone.sh
+EXTRA_DIST = data/delta-text.png data/delta-text2.png data/delta-graphic.png data/delta-graphic2.png data/hello.odt data/hello.txt $(test_SOURCES) $(unittest_SOURCES) run_unit.sh run_unit_standalone.sh
 
 check_valgrind: all
 	@fc-cache "@LO_PATH@"/share/fonts/truetype
@@ -330,3 +337,4 @@ all-local: unittest
 	@$(CLEANUP_COMMAND)
 
 .PRECIOUS: $(TEST_LOGS)
+endif
