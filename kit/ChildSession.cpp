@@ -385,11 +385,9 @@ bool ChildSession::_handleInput(const char *buffer, int length)
     {
         assert(false && "Tile traffic should go through the DocumentBroker-LoKit WS.");
     }
-    else if (tokens.equals(0, "requestloksession") ||
-             tokens.equals(0, "canceltiles"))
+    else if (tokens.equals(0, "requestloksession"))
     {
         // Just ignore these.
-        // FIXME: We probably should do something for "canceltiles" at least?
     }
     else if (tokens.equals(0, "blockingcommandstatus"))
     {
@@ -2937,6 +2935,7 @@ void ChildSession::loKitCallback(const int type, const std::string& payload)
     case LOK_CALLBACK_PROFILE_FRAME:
     case LOK_CALLBACK_DOCUMENT_PASSWORD:
     case LOK_CALLBACK_DOCUMENT_PASSWORD_TO_MODIFY:
+    case LOK_CALLBACK_DOCUMENT_PASSWORD_RESET:
         // these are not handled here.
         break;
     case LOK_CALLBACK_CELL_SELECTION_AREA:

@@ -41,6 +41,11 @@
 	min-width: 400px;
 }
 
+img.ui-drawing-area {
+	width: -webkit-fill-available;
+	width: -moz-available;
+}
+
 .jsdialog.one-child-popup {
 	border: 0;
 	margin: 0 !important;
@@ -557,7 +562,7 @@ input[type='checkbox']:checked.autofilter, .jsdialog input[type='checkbox']:chec
 
 /* text label */
 
-.jsdialog.ui-text {
+.ui-dialog-content .jsdialog.ui-text {
 	padding-inline-start: 8px;
 }
 

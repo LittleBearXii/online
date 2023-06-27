@@ -298,9 +298,10 @@ void DocumentBroker::pollThread()
 #if !MOBILEAPP
         const auto now = std::chrono::steady_clock::now();
 
-        // a tile's data is ~8k, a 4k screen is ~256 256x256 tiles
+        // a tile's data is ~8k, a 4k screen is ~256 256x256 tiles -
+        // so double that - 4Mb per view.
         if (_tileCache)
-            _tileCache->setMaxCacheSize(8 * 1024 * 256 * _sessions.size());
+            _tileCache->setMaxCacheSize(8 * 1024 * 256 * 2 * _sessions.size());
 
         if (isInteractive())
         {
@@ -3345,28 +3346,6 @@ void DocumentBroker::sendRequestedTiles(const std::shared_ptr<ClientSession>& se
             LOG_TRC("Some of the tiles were not prerendered. Sending residual tilecombine: " << req);
             _childProcess->sendTextFrame(req);
         }
-    }
-}
-
-void DocumentBroker::cancelTileRequests(const std::shared_ptr<ClientSession>& session)
-{
-    std::unique_lock<std::mutex> lock(_mutex);
-
-    // Clear tile requests
-    session->clearTilesOnFly();
-
-    session->getRequestedTiles().clear();
-
-    session->resetWireIdMap();
-
-    if (!hasTileCache())
-        return;
-
-    const std::string canceltiles = tileCache().cancelTiles(session);
-    if (!canceltiles.empty())
-    {
-        LOG_DBG("Forwarding canceltiles request: " << canceltiles);
-        _childProcess->sendTextFrame(canceltiles);
     }
 }
 

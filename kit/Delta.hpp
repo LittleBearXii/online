@@ -95,8 +95,7 @@ class DeltaGenerator {
             void next()
             {
                 _x++;
-                size_t rleMaskIndex = _x >> 6;
-                if (rleMaskIndex >= _rleMaskUnits || !(_row._rleMask[rleMaskIndex] & (uint64_t(1) << (_x & 63))))
+                if (!(_row._rleMask[_x >> 6] & (uint64_t(1) << (_x & 63))))
                     _rlePtr++;
             }
         };
@@ -125,9 +124,8 @@ class DeltaGenerator {
             _rleMask[0] = 1;
             for (unsigned int x = 1; x < width; ++x)
             {
-                size_t rleMaskIndex = x >> 6;
-                if (rleMaskIndex < _rleMaskUnits && from[x] == scratch[outp]) // set for run
-                    _rleMask[rleMaskIndex] |= uint64_t(1) << (x & 63);
+                if (from[x] == scratch[outp]) // set for run
+                    _rleMask[x>>6] |= uint64_t(1) << (x & 63);
                 else
                     scratch[++outp] = from[x];
             }
@@ -188,9 +186,9 @@ class DeltaGenerator {
                     size_t dest = output.size();
                     output.resize(dest + diff * 4);
 
-                    unpremult_copy(reinterpret_cast<unsigned char *>(&output[dest]),
-                                   (const unsigned char *)(scratch),
-                                   diff);
+                    copy_row(reinterpret_cast<unsigned char *>(&output[dest]),
+                              (const unsigned char *)(scratch),
+                              diff);
 
                     LOG_TRC("row " << curY << " different " << diff << "pixels");
                     x += diff;
@@ -353,48 +351,10 @@ class DeltaGenerator {
         }
     }
 
-    // Unpremultiplies data and converts native endian ARGB => RGBA bytes
     static void
-    unpremult_copy (unsigned char *dest, const unsigned char *srcBytes, unsigned int count)
+    copy_row (unsigned char *dest, const unsigned char *srcBytes, unsigned int count)
     {
-        const uint32_t *src = reinterpret_cast<const uint32_t *>(srcBytes);
-
-        for (unsigned int i = 0; i < count; ++i)
-        {
-            // Profile me: avoid math for runs of duplicate pixels
-            // possibly we should RLE earlier ?
-            if (i > 0 && src[i-1] == src[i])
-            {
-                std::memcpy (dest, dest - 4, 4);
-                dest += 4;
-                continue;
-            }
-
-            uint32_t pix;
-            uint8_t  alpha;
-
-            std::memcpy (&pix, src + i, sizeof (uint32_t));
-
-            alpha = (pix & 0xff000000) >> 24;
-            if (alpha == 255)
-            {
-                dest[0] = ((pix & 0xff0000) >> 16);
-                dest[1] = ((pix & 0x00ff00) >>  8);
-                dest[2] = ((pix & 0x0000ff) >>  0);
-                dest[3] = 255;
-            }
-            else if (alpha == 0)
-                dest[0] = dest[1] = dest[2] = dest[3] = 0;
-
-            else
-            {
-                dest[0] = (((pix & 0xff0000) >> 16) * 255 + alpha / 2) / alpha;
-                dest[1] = (((pix & 0x00ff00) >>  8) * 255 + alpha / 2) / alpha;
-                dest[2] = (((pix & 0x0000ff) >>  0) * 255 + alpha / 2) / alpha;
-                dest[3] = alpha;
-            }
-            dest += 4;
-        }
+        std::memcpy(dest, srcBytes, count * 4);
     }
 
     bool makeDelta(
@@ -532,7 +492,7 @@ class DeltaGenerator {
     /// Adapts cache sizing to the number of sessions
     void setSessionCount(size_t count)
     {
-        rebalanceDeltas(std::max(count, size_t(1)) * 24);
+        rebalanceDeltas(std::max(count, size_t(1)) * 48);
     }
 
     void dropCache()
@@ -695,7 +655,7 @@ class DeltaGenerator {
             // FIXME: should we RLE in pixels first ?
             for (int y = 0; y < height; ++y)
             {
-                unpremult_copy(fixedupLine, pixmap + ((startY + y) * bufferWidth * 4) + (startX * 4), width);
+                copy_row(fixedupLine, pixmap + ((startY + y) * bufferWidth * 4) + (startX * 4), width);
 
                 ZSTD_inBuffer inb;
                 inb.src = fixedupLine;

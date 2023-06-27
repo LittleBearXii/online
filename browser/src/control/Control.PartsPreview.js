@@ -225,6 +225,35 @@ L.Control.PartsPreview = L.Control.extend({
 		}, this);
 
 		var that = this;
+		var pcw = document.getElementById('presentation-controls-wrapper');
+
+		L.DomEvent.on(pcw, 'contextmenu', function(e) {
+			that._setPart(e);
+			$.contextMenu({
+				selector: '#presentation-controls-wrapper',
+				className: 'cool-font',
+				items: {
+					paste: {
+						name: _('Paste Slide'),
+						callback: function(key, options) {
+							var part = that._findClickedPart(options.$trigger[0].parentNode);
+							if (part !== null) {
+								that._setPart(that.copiedSlide);
+								that._map.duplicatePage(parseInt(part));
+							}
+						},
+						visible: function() {
+							return that.copiedSlide;
+						}
+					},
+					newslide: {
+						name: _UNO(that._map._docLayer._docType == 'presentation' ? '.uno:InsertSlide' : '.uno:InsertPage', 'presentation'),
+						callback: function() { that._map.insertPage(); }
+					}
+				}
+			});
+		}, this);
+
 		L.DomEvent.on(img, 'contextmenu', function(e) {
 			that._setPart(e);
 			$.contextMenu({
@@ -279,7 +308,7 @@ L.Control.PartsPreview = L.Control.extend({
 						callback: function(key, options) {
 							var part = that._findClickedPart(options.$trigger[0].parentNode);
 							if (part !== null) {
-								that._map.showSlide(parseInt(part) - 1);
+								that._map.showSlide();
 							}
 						},
 						visible: function(key, options) {
@@ -292,7 +321,7 @@ L.Control.PartsPreview = L.Control.extend({
 						callback: function(key, options) {
 							var part = that._findClickedPart(options.$trigger[0].parentNode);
 							if (part !== null) {
-								that._map.hideSlide(parseInt(part) - 1);
+								that._map.hideSlide();
 							}
 						},
 						visible: function(key, options) {
